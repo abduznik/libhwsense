@@ -25,9 +25,9 @@ jobs:
 
     - name: Create Release Archive
       run: |
+        Copy-Item "WinRing0x64.sys" "build/bin/Release/"
         cd build/bin/Release
-        7z a ../../hwsense-win64.zip hwsense.dll
-        Copy-Item "..\..\..\WinRing0x64.sys" .
+        7z a ../../hwsense-win64.zip hwsense.dll WinRing0x64.sys
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
