@@ -52,9 +52,9 @@ F:\Coding\sensors-test\libhwsense\build\Release\read_cpu_temp.exe
 - [x] **v0.3** — AMD SVI2 voltages (Core VDD + SoC voltage) — implemented, SVI2 telemetry not exposed on Ryzen 5 4500
 - [x] **v0.4** — Intel Core Voltage (MSR 0x198) + Package Power (RAPL sysfs) — tested on homelab i5-1235U
 - [x] **v0.5** — AMD Package Power (SVI2 V*I estimate) — implemented, hardware-dependent
-- [ ] **v0.6** — NVMe SSD temperature
-- [ ] **v0.7** — Motherboard Super I/O temps (need chip ID)
-- [ ] **v0.8** — GPU temperature (NVML or ADL)
+- [x] **v0.6** — NVMe SSD temperature — implemented via IOCTL_STORAGE_QUERY_PROPERTY
+- [x] **v0.7** — Motherboard Super I/O temps — implemented NCT6775/NCT6798 via IO ports
+- [x] **v0.8** — GPU temperature — implemented via NVML (NVIDIA) + ADL (AMD)
 
 ## Notes
 
