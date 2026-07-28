@@ -373,12 +373,13 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
 
     HANDLE dev = ctx->driver_handle;
 
-    /* Try multiple IO port pairs */
+    /* Try all known IO port pairs for Super I/O chips */
     DWORD port_pairs[][2] = {
         { 0x2E, 0x2F },  /* Standard Nuvoton/Winbond/Fintek */
         { 0x4E, 0x4F },  /* Alternate (IT8792E, some Nuvoton) */
         { 0x162, 0x163 }, /* Some ITE chips */
-        { 0x4E, 0x4F },  /* Some Fintek chips */
+        { 0x3E0, 0x3E1 }, /* Some older chips */
+        { 0x4E0, 0x4E1 }, /* Some older chips */
     };
 
     int num_port_pairs = sizeof(port_pairs) / sizeof(port_pairs[0]);
@@ -387,13 +388,13 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
         DWORD addr_port = port_pairs[p][0];
         DWORD data_port = port_pairs[p][1];
 
-        /* Detect chip */
+        /* Try to detect chip */
         sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
         if (chip.type != SIO_CHIP_UNKNOWN) {
             /* Found a chip! */
             result.chip_id = chip.id;
-            _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "%s", chip.name);
+            _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "%s (port 0x%X)", chip.name, addr_port);
 
             /* Disable IO space lock */
             if (sio_enter(dev, addr_port)) {
@@ -441,14 +442,14 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
                             "No valid temperature readings from %s", chip.name);
             }
 
-            return result;  /* Return on first chip found */
+            return result;
         }
     }
 
-    /* No chip found on any port */
+    /* No chip found - try reading raw IO ports to detect any hardware */
     result.ok = 0;
     _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
-                "No Super I/O chip detected");
+                "No Super I/O chip detected (scanned %d port pairs)", num_port_pairs);
     return result;
 }
 

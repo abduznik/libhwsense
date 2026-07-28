@@ -217,10 +217,33 @@ int main(void)
                 printf("VRM Temp:          %d C\n", ec.vrm_temp);
             if (ec.cpu_voltage_mv > 0)
                 printf("CPU Voltage (EC):  %.3f V\n", ec.cpu_voltage_mv / 1000.0);
-            if (ec.cpu_current_amps > 0)
-                printf("CPU Current (EC):  %d A\n", ec.cpu_current_amps);
         } else {
             printf("EC:                %s\n", ec.error);
+        }
+    }
+
+    /* IO Port Scan Diagnostic */
+    printf("\n--- IO Port Scan ---\n");
+    {
+        HANDLE dev = hwsense_get_driver_handle(ctx);
+        DWORD ports_to_scan[] = { 0x2E, 0x4E, 0x162, 0x3E0, 0x4E0, 0x62, 0x66 };
+        int num_ports = sizeof(ports_to_scan) / sizeof(ports_to_scan[0]);
+        int i;
+        for (i = 0; i < num_ports; i++) {
+            BYTE val = 0;
+            DWORD in_val = ports_to_scan[i];
+            DWORD out_val = 0;
+            DWORD bytes_ret = 0;
+            BOOL ok = DeviceIoControl(
+                dev, IOCTL_OLS_READ_IO_PORT_BYTE,
+                &in_val, sizeof(in_val),
+                &out_val, sizeof(out_val),
+                &bytes_ret, NULL
+            );
+            if (ok)
+                printf("  Port 0x%03X: 0x%02X\n", ports_to_scan[i], (BYTE)(out_val & 0xFF));
+            else
+                printf("  Port 0x%03X: FAIL\n", ports_to_scan[i]);
         }
     }
     printf("\n");
