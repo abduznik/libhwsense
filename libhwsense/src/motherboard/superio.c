@@ -1,11 +1,10 @@
 /*
- * superio.c — Super I/O chip detection and temperature reading.
+ * superio.c — Super I/O chip detection, temperature, and fan speed reading.
  *
- * Supports common Super I/O chips (Winbond NCT6775/NCT6776, Nuvoton NCT6798).
- * Accesses temperature registers via IO ports 0x2E/0x2F or 0x4E/0x4F.
+ * Supports Nuvoton NCT6775/NCT6776/NCT6798/NCT6799 chips.
+ * Accesses registers via IO ports 0x2E/0x2F or 0x4E/0x4F.
  *
- * WinRing0 provides IOCTL_OLS_READ_IO_PORT_BYTE / IOCTL_OLS_WRITE_IO_PORT_BYTE:
- *   IOCTL code: 0x9C4020CC (read) / 0x9C4020D0 (write)
+ * WinRing0 provides IOCTL_OLS_READ_IO_PORT_BYTE / IOCTL_OLS_WRITE_IO_PORT_BYTE.
  */
 
 #include "../core/hwsense_internal.h"
@@ -18,21 +17,26 @@
 #define SIO_ALT_PORT    0x4E
 #define SIO_ALT_DATA    0x4F
 
-/* NCT6775/NCT6776 temperature registers (bank 0) */
-#define NCT6775_TEMP1   0x27  /* Remote temperature 1 */
-#define NCT6775_TEMP2   0x73  /* Remote temperature 2 */
-#define NCT6775_TEMP3   0x75  /* Remote temperature 3 */
-#define NCT6775_SEL     0x26  /* Select register for bank switching */
+/* NCT6798D/NCT6799D chip IDs */
+#define NCT6798D_CHIP_ID    0xD42B
+#define NCT6799D_CHIP_ID    0xD802
 
-/* NCT6798 extended temperature registers */
-#define NCT6798_TEMP1   0x27
-#define NCT6798_TEMP2   0x73
-#define NCT6798_TEMP3   0x75
-#define NCT6798_TEMP4   0x77
-#define NCT6798_SEL     0x26
+/* Fan count registers for NCT6798D/NCT6799D (13-bit) */
+static const WORD nct6798_fan_regs[] = { 0x4B0, 0x4B2, 0x4B4, 0x4B6, 0x4B8, 0x4BA, 0x4CC };
+
+/* Voltage registers for NCT6798D/NCT6799D */
+static const WORD nct6798_voltage_regs[] = {
+    0x480, 0x481, 0x482, 0x483, 0x484, 0x485, 0x486, 0x487,
+    0x488, 0x489, 0x48A, 0x48B, 0x48C, 0x48D, 0x48E, 0x48F
+};
+
+/* Temperature registers for NCT6798D */
+static const WORD nct6798_temp_regs[] = { 0x073, 0x075, 0x077, 0x079, 0x07B, 0x07D, 0x4A0, 0x4A2 };
+static const WORD nct6798_temp_half[] = { 0x074, 0x076, 0x078, 0x07A, 0x07C, 0x07E, 0x49E, 0x4A1 };
+static const BYTE nct6798_temp_bits[] = { 7, 7, 7, 7, 7, 7, 6, 7 };
 
 /* Read/Write IO port via WinRing0 */
-static BOOL sio_read_port(HANDLE dev, WORD port, BYTE *out_value)
+static BOOL sio_read_port(HANDLE dev, DWORD port, BYTE *out_value)
 {
     DWORD in_val = port;
     DWORD out_val = 0;
@@ -52,13 +56,13 @@ static BOOL sio_read_port(HANDLE dev, WORD port, BYTE *out_value)
     return TRUE;
 }
 
-static BOOL sio_write_port(HANDLE dev, WORD port, BYTE value)
+static BOOL sio_write_port(HANDLE dev, DWORD port, BYTE value)
 {
-    BYTE inp[2];
+    BYTE inp[5];
     DWORD bytes_ret = 0;
 
-    *(WORD*)&inp[0] = port;
-    inp[2] = value;
+    *(DWORD*)&inp[0] = port;
+    inp[4] = value;
 
     return DeviceIoControl(
         dev, IOCTL_OLS_WRITE_IO_PORT_BYTE,
@@ -71,50 +75,53 @@ static BOOL sio_write_port(HANDLE dev, WORD port, BYTE value)
 /*
  * Enter Super I/O configuration mode.
  */
-static BOOL sio_enter(HANDLE dev, WORD addr_port)
+static BOOL sio_enter(HANDLE dev, DWORD addr_port)
 {
-    BYTE val;
-    BOOL ok;
-
-    /* Enter configuration: write 0x87 twice to address port */
-    ok = sio_write_port(dev, addr_port, 0x87);
-    if (!ok) return FALSE;
-    ok = sio_write_port(dev, addr_port, 0x87);
-    return ok;
+    if (!sio_write_port(dev, addr_port, 0x87))
+        return FALSE;
+    return sio_write_port(dev, addr_port, 0x87);
 }
 
 /*
  * Exit Super I/O configuration mode.
  */
-static BOOL sio_exit(HANDLE dev, WORD addr_port)
+static BOOL sio_exit(HANDLE dev, DWORD addr_port)
 {
-    BYTE val;
     return sio_write_port(dev, addr_port, 0xAA);
 }
 
 /*
  * Read a Super I/O register.
  */
-static BOOL sio_read_reg(HANDLE dev, WORD addr_port, WORD data_port,
+static BOOL sio_read_reg(HANDLE dev, DWORD addr_port, DWORD data_port,
                          BYTE reg, BYTE *out_value)
 {
-    BOOL ok = sio_write_port(dev, addr_port, reg);
-    if (!ok) return FALSE;
+    if (!sio_write_port(dev, addr_port, reg))
+        return FALSE;
     return sio_read_port(dev, data_port, out_value);
 }
 
 /*
- * Detect Super I/O chip ID.
- * Returns chip ID (high byte = manufacturer, low byte = revision), or 0 on failure.
+ * Write a Super I/O register.
  */
-static WORD sio_detect_chip(HANDLE dev, WORD addr_port, WORD data_port)
+static BOOL sio_write_reg(HANDLE dev, DWORD addr_port, DWORD data_port,
+                          BYTE reg, BYTE value)
+{
+    if (!sio_write_port(dev, addr_port, reg))
+        return FALSE;
+    return sio_write_port(dev, data_port, value);
+}
+
+/*
+ * Detect Super I/O chip ID.
+ */
+static WORD sio_detect_chip(HANDLE dev, DWORD addr_port, DWORD data_port)
 {
     BYTE chip_id_high = 0, chip_id_low = 0;
 
     if (!sio_enter(dev, addr_port))
         return 0;
 
-    /* Read chip ID from registers 0x20 (high) and 0x21 (low) */
     sio_read_reg(dev, addr_port, data_port, 0x20, &chip_id_high);
     sio_read_reg(dev, addr_port, data_port, 0x21, &chip_id_low);
 
@@ -124,77 +131,93 @@ static WORD sio_detect_chip(HANDLE dev, WORD addr_port, WORD data_port)
 }
 
 /*
- * Read temperature from NCT6775/NCT6776.
- * channel: 0 = TEMP1, 1 = TEMP2, 2 = TEMP3
+ * Read NCT6798D/NCT6799D register with bank selection.
  */
-static int nct6775_read_temp(HANDLE dev, WORD addr_port, WORD data_port, int channel)
+static BYTE nct6798_read_reg(HANDLE dev, DWORD addr_port, DWORD data_port, WORD reg)
 {
-    BYTE temp_reg;
-    BYTE val;
+    BYTE bank = (reg >> 8) & 0xFF;
+    BYTE offset = reg & 0xFF;
+    BYTE val = 0;
 
-    if (!sio_enter(dev, addr_port))
+    /* Select bank */
+    sio_write_reg(dev, addr_port, data_port, 0x4E, bank);
+    /* Read register */
+    sio_read_reg(dev, addr_port, data_port, offset, &val);
+
+    return val;
+}
+
+/*
+ * Read temperature from NCT6798D.
+ * Returns temperature in Celsius, or -1 on failure.
+ */
+static int nct6798_read_temp(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+{
+    if (channel < 0 || channel >= 8)
         return -1;
 
-    /* Select bank 0 */
-    sio_read_reg(dev, addr_port, data_port, NCT6775_SEL, &val);
-    sio_write_port(dev, data_port, val & 0x8F);  /* bank 0 */
+    BYTE val = nct6798_read_reg(dev, addr_port, data_port, nct6798_temp_regs[channel]);
+    BYTE half = nct6798_read_reg(dev, addr_port, data_port, nct6798_temp_half[channel]);
+    BYTE bit = nct6798_temp_bits[channel];
 
-    switch (channel) {
-    case 0: temp_reg = NCT6775_TEMP1; break;
-    case 1: temp_reg = NCT6775_TEMP2; break;
-    case 2: temp_reg = NCT6775_TEMP3; break;
-    default:
-        sio_exit(dev, addr_port);
+    /* Temperature = 0.5 * ((val << 1) | ((half >> bit) & 1)) */
+    int temp = (int)(((val << 1) | ((half >> bit) & 1)) / 2);
+
+    /* Sanity check */
+    if (temp < -40 || temp > 150)
         return -1;
-    }
 
-    sio_read_reg(dev, addr_port, data_port, temp_reg, &val);
-    sio_exit(dev, addr_port);
-
-    /* NCT6775 temperature is in 8-bit signed format */
-    int temp = (int)(signed char)val;
     return temp;
 }
 
 /*
- * Read temperature from NCT6798 (extended).
- * channel: 0-3 for different temperature sources
+ * Read fan RPM from NCT6798D.
+ * Returns RPM, or -1 on failure.
  */
-static int nct6798_read_temp(HANDLE dev, WORD addr_port, WORD data_port, int channel)
+static int nct6798_read_fan(HANDLE dev, DWORD addr_port, DWORD data_port, int fan_num)
 {
-    BYTE temp_reg;
-    BYTE val;
-
-    if (!sio_enter(dev, addr_port))
+    if (fan_num < 0 || fan_num >= 7)
         return -1;
 
-    /* Select bank 0 */
-    sio_read_reg(dev, addr_port, data_port, NCT6798_SEL, &val);
-    sio_write_port(dev, data_port, val & 0x8F);
+    WORD reg = nct6798_fan_regs[fan_num];
+    BYTE low = nct6798_read_reg(dev, addr_port, data_port, reg);
+    BYTE high = nct6798_read_reg(dev, addr_port, data_port, reg + 1);
 
-    switch (channel) {
-    case 0: temp_reg = NCT6798_TEMP1; break;
-    case 1: temp_reg = NCT6798_TEMP2; break;
-    case 2: temp_reg = NCT6798_TEMP3; break;
-    case 3: temp_reg = NCT6798_TEMP4; break;
-    default:
-        sio_exit(dev, addr_port);
-        return -1;
-    }
+    /* 13-bit counter */
+    int count = ((high & 0x1F) << 8) | low;
 
-    sio_read_reg(dev, addr_port, data_port, temp_reg, &val);
-    sio_exit(dev, addr_port);
+    /* RPM = 1,350,000 / count (if count > 0x15) */
+    if (count <= 0x15)
+        return 0;
 
-    int temp = (int)(signed char)val;
-    return temp;
+    return 1350000 / count;
 }
 
 /*
- * Maximum number of Super I/O temperature sensors.
+ * Read voltage from NCT6798D.
+ * Returns voltage in mV, or -1 on failure.
  */
+static int nct6798_read_voltage(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+{
+    if (channel < 0 || channel >= 16)
+        return -1;
+
+    WORD reg = nct6798_voltage_regs[channel];
+    BYTE val = nct6798_read_reg(dev, addr_port, data_port, reg);
+
+    /* Voltage = 0.008 * register_value (in volts) = 8 * register_value (in mV) */
+    return (int)(val * 8);
+}
 
 /*
- * Read all available Super I/O temperatures.
+ * Maximum number of Super I/O sensors.
+ */
+#define MAX_SUPERIO_TEMPS   8
+#define MAX_SUPERIO_FANS    7
+#define MAX_SUPERIO_VOLTAGES 16
+
+/*
+ * Read all available Super I/O sensors.
  */
 hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
 {
@@ -208,14 +231,13 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
     }
 
     HANDLE dev = ctx->driver_handle;
-    WORD addr_port = SIO_ADDR_PORT;
-    WORD data_port = SIO_DATA_PORT;
+    DWORD addr_port = SIO_ADDR_PORT;
+    DWORD data_port = SIO_DATA_PORT;
 
     /* Detect chip */
     WORD chip_id = sio_detect_chip(dev, addr_port, data_port);
 
     if (chip_id == 0) {
-        /* Try alternate ports */
         addr_port = SIO_ALT_PORT;
         data_port = SIO_ALT_DATA;
         chip_id = sio_detect_chip(dev, addr_port, data_port);
@@ -229,32 +251,36 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
     }
 
     result.chip_id = chip_id;
-    _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE,
-                "NCT67%02X", chip_id & 0xFF);
 
-    /* Read temperatures based on chip type */
+    /* Identify chip */
     BYTE high = (chip_id >> 8) & 0xFF;
     BYTE low = chip_id & 0xFF;
 
-    if (high == 0xC8 || high == 0xD1) {
-        /* NCT6775/NCT6776 family */
-        int i;
-        for (i = 0; i < 3; i++) {
-            int temp = nct6775_read_temp(dev, addr_port, data_port, i);
-            if (temp > -40 && temp < 150) {
-                result.temperatures[result.count] = temp;
-                result.count++;
-            }
-        }
-    } else if (high == 0xC9 || high == 0xD3) {
-        /* NCT6798 family */
-        int i;
-        for (i = 0; i < 4; i++) {
-            int temp = nct6798_read_temp(dev, addr_port, data_port, i);
-            if (temp > -40 && temp < 150) {
-                result.temperatures[result.count] = temp;
-                result.count++;
-            }
+    if (chip_id == NCT6798D_CHIP_ID) {
+        _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "NCT6798D");
+    } else if (chip_id == NCT6799D_CHIP_ID) {
+        _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "NCT6799D");
+    } else {
+        _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE,
+                    "Nuvoton 0x%04X", chip_id);
+    }
+
+    /* Enter config mode to disable IO space lock */
+    if (sio_enter(dev, addr_port)) {
+        BYTE lock_val = 0;
+        sio_read_reg(dev, addr_port, data_port, 0x28, &lock_val);
+        lock_val &= ~0x10;  /* Clear bit 4 (IO space lock) */
+        sio_write_reg(dev, addr_port, data_port, 0x28, lock_val);
+        sio_exit(dev, addr_port);
+    }
+
+    /* Read temperatures */
+    int i;
+    for (i = 0; i < 8 && result.count < MAX_SUPERIO_TEMPS; i++) {
+        int temp = nct6798_read_temp(dev, addr_port, data_port, i);
+        if (temp > 0) {
+            result.temperatures[result.count] = temp;
+            result.count++;
         }
     }
 
@@ -262,6 +288,136 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
     if (result.count == 0) {
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
                     "No valid temperature readings from Super I/O chip");
+    }
+
+    return result;
+}
+
+/*
+ * Read fan speeds from Super I/O.
+ */
+hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx)
+{
+    hwsense_superio_result_t result = {0};
+
+    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE) {
+        result.ok = 0;
+        _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
+                    "Invalid context or driver handle");
+        return result;
+    }
+
+    HANDLE dev = ctx->driver_handle;
+    DWORD addr_port = SIO_ADDR_PORT;
+    DWORD data_port = SIO_DATA_PORT;
+
+    /* Detect chip */
+    WORD chip_id = sio_detect_chip(dev, addr_port, data_port);
+
+    if (chip_id == 0) {
+        addr_port = SIO_ALT_PORT;
+        data_port = SIO_ALT_DATA;
+        chip_id = sio_detect_chip(dev, addr_port, data_port);
+    }
+
+    if (chip_id == 0) {
+        result.ok = 0;
+        _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
+                    "No Super I/O chip detected");
+        return result;
+    }
+
+    result.chip_id = chip_id;
+
+    /* Enter config mode to disable IO space lock */
+    if (sio_enter(dev, addr_port)) {
+        BYTE lock_val = 0;
+        sio_read_reg(dev, addr_port, data_port, 0x28, &lock_val);
+        lock_val &= ~0x10;
+        sio_write_reg(dev, addr_port, data_port, 0x28, lock_val);
+        sio_exit(dev, addr_port);
+    }
+
+    /* Read fan speeds */
+    int i;
+    for (i = 0; i < 7 && result.count < MAX_SUPERIO_FANS; i++) {
+        int rpm = nct6798_read_fan(dev, addr_port, data_port, i);
+        if (rpm >= 0) {
+            result.fan_rpms[result.count] = rpm;
+            result.fan_count++;
+            result.count++;
+        }
+    }
+
+    result.ok = (result.fan_count > 0) ? 1 : 0;
+    if (result.fan_count == 0) {
+        _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
+                    "No valid fan readings from Super I/O chip");
+    }
+
+    return result;
+}
+
+/*
+ * Read voltages from Super I/O.
+ */
+hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx)
+{
+    hwsense_superio_result_t result = {0};
+
+    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE) {
+        result.ok = 0;
+        _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
+                    "Invalid context or driver handle");
+        return result;
+    }
+
+    HANDLE dev = ctx->driver_handle;
+    DWORD addr_port = SIO_ADDR_PORT;
+    DWORD data_port = SIO_DATA_PORT;
+
+    /* Detect chip */
+    WORD chip_id = sio_detect_chip(dev, addr_port, data_port);
+
+    if (chip_id == 0) {
+        addr_port = SIO_ALT_PORT;
+        data_port = SIO_ALT_DATA;
+        chip_id = sio_detect_chip(dev, addr_port, data_port);
+    }
+
+    if (chip_id == 0) {
+        result.ok = 0;
+        _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
+                    "No Super I/O chip detected");
+        return result;
+    }
+
+    result.chip_id = chip_id;
+
+    /* Enter config mode to disable IO space lock */
+    if (sio_enter(dev, addr_port)) {
+        BYTE lock_val = 0;
+        sio_read_reg(dev, addr_port, data_port, 0x28, &lock_val);
+        lock_val &= ~0x10;
+        sio_write_reg(dev, addr_port, data_port, 0x28, lock_val);
+        sio_exit(dev, addr_port);
+    }
+
+    /* Read voltages */
+    int i;
+    for (i = 0; i < 16 && result.voltage_count < MAX_SUPERIO_VOLTAGES; i++) {
+        int mv = nct6798_read_voltage(dev, addr_port, data_port, i);
+        if (mv > 0) {
+            result.voltages[result.voltage_count] = mv / 1000.0;  /* Convert to volts */
+            result.voltage_count++;
+            result.count++;
+        }
+    }
+
+    result.ok = (result.voltage_count > 0) ? 1 : 0;
+    if (result.voltage_count == 0) {
+        _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
+                    "No valid voltage readings from Super I/O chip");
     }
 
     return result;

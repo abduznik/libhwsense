@@ -125,15 +125,21 @@ double hwsense_cpu_package_power_watts(hwsense_ctx_t *ctx);
 /*
  * Maximum number of Super I/O temperature sensors.
  */
-#define HWSENSE_MAX_SUPERIO_TEMPS 4
+#define HWSENSE_MAX_SUPERIO_TEMPS 8
+#define HWSENSE_MAX_SUPERIO_FANS 7
+#define HWSENSE_MAX_SUPERIO_VOLTAGES 16
 
 /*
- * Super I/O temperature reading result.
+ * Super I/O sensor reading result.
  */
 typedef struct {
     int ok;
     int temperatures[HWSENSE_MAX_SUPERIO_TEMPS];
+    int fan_rpms[HWSENSE_MAX_SUPERIO_FANS];
+    double voltages[HWSENSE_MAX_SUPERIO_VOLTAGES];
     int count;
+    int fan_count;
+    int voltage_count;
     unsigned short chip_id;
     char chip_name[64];
     char error[256];
@@ -141,9 +147,18 @@ typedef struct {
 
 /*
  * Read Super I/O motherboard temperatures.
- * Returns temperature readings from Winbond/Nuvoton chips.
  */
 hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx);
+
+/*
+ * Read Super I/O fan speeds.
+ */
+hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx);
+
+/*
+ * Read Super I/O voltages.
+ */
+hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx);
 
 /*
  * GPU temperature reading result.

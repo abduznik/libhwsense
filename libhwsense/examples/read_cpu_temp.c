@@ -170,6 +170,26 @@ int main(void)
             printf("%d C  ", sio.temperatures[i]);
         printf("\n");
     }
+
+    /* Super I/O Fan Speeds */
+    hwsense_superio_result_t sio_fans = hwsense_superio_fans(ctx);
+    if (sio_fans.ok && sio_fans.fan_count > 0) {
+        printf("Fan Speeds:        ");
+        int i;
+        for (i = 0; i < sio_fans.fan_count; i++)
+            printf("Fan%d: %d RPM  ", i + 1, sio_fans.fan_rpms[i]);
+        printf("\n");
+    }
+
+    /* Super I/O Voltages */
+    hwsense_superio_result_t sio_volts = hwsense_superio_voltages(ctx);
+    if (sio_volts.ok && sio_volts.voltage_count > 0) {
+        printf("SIO Voltages:      ");
+        int i;
+        for (i = 0; i < sio_volts.voltage_count && i < 4; i++)
+            printf("V%d: %.3f V  ", i + 1, sio_volts.voltages[i]);
+        printf("\n");
+    }
     printf("\n");
 
     /* ── SMU Diagnostics (AMD only) ── */
