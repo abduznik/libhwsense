@@ -411,6 +411,113 @@ static int read_fan_speeds(fan_speed_t *fans, int max_fans)
     return count;
 }
 
+/* ── Disk I/O Stats ─────────────────────────────────────────────────── */
+
+typedef struct {
+    char name[32];
+    long long reads;
+    long long writes;
+    long long read_bytes;
+    long long write_bytes;
+} disk_io_t;
+
+static int read_disk_io(disk_io_t *disks, int max_disks, char **devices)
+{
+    FILE *f;
+    char line[1024];
+    int count = 0;
+
+    f = fopen("/proc/diskstats", "r");
+    if (!f)
+        return 0;
+
+    while (fgets(line, sizeof(line), f) && count < max_disks) {
+        int major, minor;
+        char name[32];
+        long long fields[11];
+
+        /* /proc/diskstats: major minor name 11_fields */
+        if (sscanf(line, "%d %d %31s %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld",
+                   &major, &minor, name,
+                   &fields[0], &fields[1], &fields[2], &fields[3],
+                   &fields[4], &fields[5], &fields[6], &fields[7],
+                   &fields[8], &fields[9], &fields[10]) == 14) {
+            /* Check if this device matches one we want */
+            int match = 0;
+            int d;
+            for (d = 0; devices[d]; d++) {
+                if (strcmp(name, devices[d]) == 0) {
+                    match = 1;
+                    break;
+                }
+            }
+            if (match) {
+                strncpy(disks[count].name, name, sizeof(disks[count].name) - 1);
+                disks[count].reads = fields[0];
+                disks[count].writes = fields[4];
+                disks[count].read_bytes = fields[2] * 512;
+                disks[count].write_bytes = fields[6] * 512;
+                count++;
+            }
+        }
+    }
+
+    fclose(f);
+    return count;
+}
+
+/* ── Memory Stats ──────────────────────────────────────────────────── */
+
+typedef struct {
+    long long total_kb;
+    long long free_kb;
+    long long available_kb;
+    long long buffers_kb;
+    long long cached_kb;
+    long long swap_total_kb;
+    long long swap_free_kb;
+} mem_stats_t;
+
+static int read_mem_stats(mem_stats_t *mem)
+{
+    FILE *f;
+    char line[256];
+
+    memset(mem, 0, sizeof(*mem));
+
+    f = fopen("/proc/meminfo", "r");
+    if (!f)
+        return 0;
+
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "MemTotal: %lld kB", &mem->total_kb) == 1) continue;
+        if (sscanf(line, "MemFree: %lld kB", &mem->free_kb) == 1) continue;
+        if (sscanf(line, "MemAvailable: %lld kB", &mem->available_kb) == 1) continue;
+        if (sscanf(line, "Buffers: %lld kB", &mem->buffers_kb) == 1) continue;
+        if (sscanf(line, "Cached: %lld kB", &mem->cached_kb) == 1) continue;
+        if (sscanf(line, "SwapTotal: %lld kB", &mem->swap_total_kb) == 1) continue;
+        if (sscanf(line, "SwapFree: %lld kB", &mem->swap_free_kb) == 1) continue;
+    }
+
+    fclose(f);
+    return 1;
+}
+
+/* ── Load Average ──────────────────────────────────────────────────── */
+
+static int read_loadavg(double *load1, double *load5, double *load15, int *procs)
+{
+    FILE *f;
+
+    f = fopen("/proc/loadavg", "r");
+    if (!f)
+        return 0;
+
+    int result = fscanf(f, "%lf %lf %lf %d", load1, load5, load15, procs);
+    fclose(f);
+    return (result == 4);
+}
+
 /* ── Main ──────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -422,6 +529,12 @@ int main(void)
     int cpu_count;
     drive_stats_t drives[MAX_DRIVES];
     char *drive_devices[] = {"sda", "sdc", "nvme0n1", NULL};
+    disk_io_t diskio[8];
+    char *diskio_devices[] = {"sda", "sdc", "nvme0n1", NULL};
+    int diskio_count;
+    mem_stats_t mem;
+    double load1, load5, load15;
+    int procs;
     net_stats_t net[MAX_NET_IF];
     int net_count;
     fan_speed_t fans[8];
@@ -432,6 +545,23 @@ int main(void)
     printf("Timestamp: ");
     fflush(stdout);
     system("date '+%Y-%m-%d %H:%M:%S'");
+
+    /* ── System Load ── */
+    if (read_loadavg(&load1, &load5, &load15, &procs)) {
+        printf("Load Average: %.2f %.2f %.2f (%d processes)\n", load1, load5, load15, procs);
+    }
+
+    /* ── Memory Usage ── */
+    if (read_mem_stats(&mem)) {
+        double used_gb = (mem.total_kb - mem.available_kb) / 1048576.0;
+        double total_gb = mem.total_kb / 1048576.0;
+        double swap_used_gb = (mem.swap_total_kb - mem.swap_free_kb) / 1048576.0;
+        printf("Memory: %.1f / %.1f GB (%.0f%% used)", used_gb, total_gb,
+               100.0 * (mem.total_kb - mem.available_kb) / mem.total_kb);
+        if (mem.swap_total_kb > 0)
+            printf("  Swap: %.1f GB used", swap_used_gb);
+        printf("\n");
+    }
     printf("\n");
 
     /* ── CPU Temperatures ── */
@@ -498,6 +628,17 @@ int main(void)
             printf("  %-10s %d RPM\n", fans[i].name, fans[i].rpm);
     } else {
         printf("  No fan data available\n");
+    }
+    printf("\n");
+
+    /* ── Disk I/O Stats ── */
+    printf("--- Disk I/O Stats ---\n");
+    diskio_count = read_disk_io(diskio, 8, diskio_devices);
+    for (i = 0; i < diskio_count; i++) {
+        printf("  %-12s Reads: %8.2f GB  Writes: %8.2f GB\n",
+               diskio[i].name,
+               diskio[i].read_bytes / 1e9,
+               diskio[i].write_bytes / 1e9);
     }
     printf("\n");
 
