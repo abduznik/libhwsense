@@ -165,13 +165,16 @@ int main(void)
 
     /* Super I/O */
     hwsense_superio_result_t sio = hwsense_superio_temps(ctx);
+    printf("Super I/O:         ID=0x%04X", sio.chip_id);
     if (sio.ok && sio.count > 0) {
-        printf("Super I/O (%s):    ", sio.chip_name);
+        printf(" (%s) ", sio.chip_name);
         int i;
         for (i = 0; i < sio.count; i++)
             printf("%d C  ", sio.temperatures[i]);
-        printf("\n");
+    } else {
+        printf(" - %s", sio.error);
     }
+    printf("\n");
 
     /* Super I/O Fan Speeds */
     hwsense_superio_result_t sio_fans = hwsense_superio_fans(ctx);

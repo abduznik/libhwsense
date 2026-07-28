@@ -1,10 +1,10 @@
 /*
  * superio.c — Super I/O chip detection, temperature, and fan speed reading.
  *
- * Supports Nuvoton NCT6775/NCT6776/NCT6798/NCT6799 chips.
- * Accesses registers via IO ports 0x2E/0x2F or 0x4E/0x4F.
+ * Supports Nuvoton NCT6791D/93D/95D/96D/97D/98D/99D, ITE IT8628E/IT8688E/IT8728F,
+ * Winbond W83627DHG, and Fintek F71882/F71889 chips.
  *
- * WinRing0 provides IOCTL_OLS_READ_IO_PORT_BYTE / IOCTL_OLS_WRITE_IO_PORT_BYTE.
+ * Accesses registers via IO ports 0x2E/0x2F or 0x4E/0x4F.
  */
 
 #include "../core/hwsense_internal.h"
@@ -17,23 +17,79 @@
 #define SIO_ALT_PORT    0x4E
 #define SIO_ALT_DATA    0x4F
 
-/* NCT6798D/NCT6799D chip IDs */
-#define NCT6798D_CHIP_ID    0xD42B
-#define NCT6799D_CHIP_ID    0xD802
+/* Chip types */
+typedef enum {
+    SIO_CHIP_UNKNOWN = 0,
+    SIO_CHIP_NUVOTON,
+    SIO_CHIP_ITE,
+    SIO_CHIP_WINBOND,
+    SIO_CHIP_FINTEK
+} sio_chip_type_t;
 
-/* Fan count registers for NCT6798D/NCT6799D (13-bit) */
-static const WORD nct6798_fan_regs[] = { 0x4B0, 0x4B2, 0x4B4, 0x4B6, 0x4B8, 0x4BA, 0x4CC };
+typedef struct {
+    WORD id;
+    sio_chip_type_t type;
+    const char *name;
+} sio_chip_info_t;
 
-/* Voltage registers for NCT6798D/NCT6799D */
-static const WORD nct6798_voltage_regs[] = {
+/* Known chip IDs */
+static const sio_chip_info_t known_chips[] = {
+    /* Nuvoton */
+    { 0xC803, SIO_CHIP_NUVOTON, "NCT6791D" },
+    { 0xC833, SIO_CHIP_NUVOTON, "NCT6791D" },
+    { 0xC911, SIO_CHIP_NUVOTON, "NCT6792D" },
+    { 0xC913, SIO_CHIP_NUVOTON, "NCT6792DA" },
+    { 0xD121, SIO_CHIP_NUVOTON, "NCT6793D" },
+    { 0xD122, SIO_CHIP_NUVOTON, "NCT6793D" },
+    { 0xD352, SIO_CHIP_NUVOTON, "NCT6795D" },
+    { 0xD423, SIO_CHIP_NUVOTON, "NCT6796D" },
+    { 0xD42A, SIO_CHIP_NUVOTON, "NCT6796DR" },
+    { 0xD451, SIO_CHIP_NUVOTON, "NCT6797D" },
+    { 0xD42B, SIO_CHIP_NUVOTON, "NCT6798D" },
+    { 0xD802, SIO_CHIP_NUVOTON, "NCT6799D" },
+    { 0xD806, SIO_CHIP_NUVOTON, "NCT6701D" },
+    /* ITE */
+    { 0x8628, SIO_CHIP_ITE, "IT8628E" },
+    { 0x8688, SIO_CHIP_ITE, "IT8688E" },
+    { 0x8689, SIO_CHIP_ITE, "IT8689E" },
+    { 0x8728, SIO_CHIP_ITE, "IT8728F" },
+    { 0x8790, SIO_CHIP_ITE, "IT8790E" },
+    { 0x8733, SIO_CHIP_ITE, "IT8792E" },
+    /* Winbond */
+    { 0xA020, SIO_CHIP_WINBOND, "W83627DHG" },
+    { 0xB070, SIO_CHIP_WINBOND, "W83627DHG-P" },
+    /* Fintek */
+    { 0x0541, SIO_CHIP_FINTEK, "F71882FG" },
+    { 0x0723, SIO_CHIP_FINTEK, "F71889F" },
+};
+
+#define KNOWN_CHIPS_COUNT (sizeof(known_chips) / sizeof(known_chips[0]))
+
+/* Fan count registers for Nuvoton NCT679x (13-bit) */
+static const WORD nct679x_fan_regs[] = { 0x4B0, 0x4B2, 0x4B4, 0x4B6, 0x4B8, 0x4BA, 0x4CC };
+
+/* Voltage registers for Nuvoton NCT679x */
+static const WORD nct679x_voltage_regs[] = {
     0x480, 0x481, 0x482, 0x483, 0x484, 0x485, 0x486, 0x487,
     0x488, 0x489, 0x48A, 0x48B, 0x48C, 0x48D, 0x48E, 0x48F
 };
 
-/* Temperature registers for NCT6798D */
-static const WORD nct6798_temp_regs[] = { 0x073, 0x075, 0x077, 0x079, 0x07B, 0x07D, 0x4A0, 0x4A2 };
-static const WORD nct6798_temp_half[] = { 0x074, 0x076, 0x078, 0x07A, 0x07C, 0x07E, 0x49E, 0x4A1 };
-static const BYTE nct6798_temp_bits[] = { 7, 7, 7, 7, 7, 7, 6, 7 };
+/* Temperature registers for Nuvoton NCT679x */
+static const WORD nct679x_temp_regs[] = { 0x073, 0x075, 0x077, 0x079, 0x07B, 0x07D, 0x4A0, 0x4A2 };
+static const WORD nct679x_temp_half[] = { 0x074, 0x076, 0x078, 0x07A, 0x07C, 0x07E, 0x49E, 0x4A1 };
+static const BYTE nct679x_temp_bits[] = { 7, 7, 7, 7, 7, 7, 6, 7 };
+
+/* ITE temperature registers */
+static const BYTE ite_temp_regs[] = { 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E };
+
+/* ITE fan tachometer registers (low, high) */
+static const BYTE ite_fan_regs[][2] = {
+    { 0x0D, 0x18 }, { 0x0E, 0x19 }, { 0x0F, 0x1A },
+    { 0x80, 0x81 }, { 0x82, 0x83 }, { 0x4C, 0x4D }
+};
+
+/* ITE voltage registers */
+static const BYTE ite_voltage_regs[] = { 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2F };
 
 /* Read/Write IO port via WinRing0 */
 static BOOL sio_read_port(HANDLE dev, DWORD port, BYTE *out_value)
@@ -113,57 +169,63 @@ static BOOL sio_write_reg(HANDLE dev, DWORD addr_port, DWORD data_port,
 }
 
 /*
- * Detect Super I/O chip ID.
+ * Read Nuvoton register with bank selection.
  */
-static WORD sio_detect_chip(HANDLE dev, DWORD addr_port, DWORD data_port)
-{
-    BYTE chip_id_high = 0, chip_id_low = 0;
-
-    if (!sio_enter(dev, addr_port))
-        return 0;
-
-    sio_read_reg(dev, addr_port, data_port, 0x20, &chip_id_high);
-    sio_read_reg(dev, addr_port, data_port, 0x21, &chip_id_low);
-
-    sio_exit(dev, addr_port);
-
-    return ((WORD)chip_id_high << 8) | chip_id_low;
-}
-
-/*
- * Read NCT6798D/NCT6799D register with bank selection.
- */
-static BYTE nct6798_read_reg(HANDLE dev, DWORD addr_port, DWORD data_port, WORD reg)
+static BYTE nct679x_read_reg(HANDLE dev, DWORD addr_port, DWORD data_port, WORD reg)
 {
     BYTE bank = (reg >> 8) & 0xFF;
     BYTE offset = reg & 0xFF;
     BYTE val = 0;
 
-    /* Select bank */
     sio_write_reg(dev, addr_port, data_port, 0x4E, bank);
-    /* Read register */
     sio_read_reg(dev, addr_port, data_port, offset, &val);
 
     return val;
 }
 
 /*
- * Read temperature from NCT6798D.
- * Returns temperature in Celsius, or -1 on failure.
+ * Detect Super I/O chip ID.
  */
-static int nct6798_read_temp(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+static sio_chip_info_t sio_detect_chip(HANDLE dev, DWORD addr_port, DWORD data_port)
+{
+    sio_chip_info_t result = {0, SIO_CHIP_UNKNOWN, "Unknown"};
+    BYTE chip_id_high = 0, chip_id_low = 0;
+
+    if (!sio_enter(dev, addr_port))
+        return result;
+
+    sio_read_reg(dev, addr_port, data_port, 0x20, &chip_id_high);
+    sio_read_reg(dev, addr_port, data_port, 0x21, &chip_id_low);
+
+    sio_exit(dev, addr_port);
+
+    WORD chip_id = ((WORD)chip_id_high << 8) | chip_id_low;
+
+    /* Look up in known chips table */
+    for (int i = 0; i < (int)KNOWN_CHIPS_COUNT; i++) {
+        if (known_chips[i].id == chip_id) {
+            return known_chips[i];
+        }
+    }
+
+    result.id = chip_id;
+    return result;
+}
+
+/*
+ * Read temperature from Nuvoton NCT679x chip.
+ */
+static int nct679x_read_temp(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
 {
     if (channel < 0 || channel >= 8)
         return -1;
 
-    BYTE val = nct6798_read_reg(dev, addr_port, data_port, nct6798_temp_regs[channel]);
-    BYTE half = nct6798_read_reg(dev, addr_port, data_port, nct6798_temp_half[channel]);
-    BYTE bit = nct6798_temp_bits[channel];
+    BYTE val = nct679x_read_reg(dev, addr_port, data_port, nct679x_temp_regs[channel]);
+    BYTE half = nct679x_read_reg(dev, addr_port, data_port, nct679x_temp_half[channel]);
+    BYTE bit = nct679x_temp_bits[channel];
 
-    /* Temperature = 0.5 * ((val << 1) | ((half >> bit) & 1)) */
     int temp = (int)(((val << 1) | ((half >> bit) & 1)) / 2);
 
-    /* Sanity check */
     if (temp < -40 || temp > 150)
         return -1;
 
@@ -171,22 +233,19 @@ static int nct6798_read_temp(HANDLE dev, DWORD addr_port, DWORD data_port, int c
 }
 
 /*
- * Read fan RPM from NCT6798D.
- * Returns RPM, or -1 on failure.
+ * Read fan RPM from Nuvoton NCT679x chip.
  */
-static int nct6798_read_fan(HANDLE dev, DWORD addr_port, DWORD data_port, int fan_num)
+static int nct679x_read_fan(HANDLE dev, DWORD addr_port, DWORD data_port, int fan_num)
 {
     if (fan_num < 0 || fan_num >= 7)
         return -1;
 
-    WORD reg = nct6798_fan_regs[fan_num];
-    BYTE low = nct6798_read_reg(dev, addr_port, data_port, reg);
-    BYTE high = nct6798_read_reg(dev, addr_port, data_port, reg + 1);
+    WORD reg = nct679x_fan_regs[fan_num];
+    BYTE low = nct679x_read_reg(dev, addr_port, data_port, reg);
+    BYTE high = nct679x_read_reg(dev, addr_port, data_port, reg + 1);
 
-    /* 13-bit counter */
     int count = ((high & 0x1F) << 8) | low;
 
-    /* RPM = 1,350,000 / count (if count > 0x15) */
     if (count <= 0x15)
         return 0;
 
@@ -194,27 +253,71 @@ static int nct6798_read_fan(HANDLE dev, DWORD addr_port, DWORD data_port, int fa
 }
 
 /*
- * Read voltage from NCT6798D.
- * Returns voltage in mV, or -1 on failure.
+ * Read voltage from Nuvoton NCT679x chip.
  */
-static int nct6798_read_voltage(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+static int nct679x_read_voltage(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
 {
     if (channel < 0 || channel >= 16)
         return -1;
 
-    WORD reg = nct6798_voltage_regs[channel];
-    BYTE val = nct6798_read_reg(dev, addr_port, data_port, reg);
+    WORD reg = nct679x_voltage_regs[channel];
+    BYTE val = nct679x_read_reg(dev, addr_port, data_port, reg);
 
-    /* Voltage = 0.008 * register_value (in volts) = 8 * register_value (in mV) */
-    return (int)(val * 8);
+    return (int)(val * 8);  /* 8 mV per step */
 }
 
 /*
- * Maximum number of Super I/O sensors.
+ * Read temperature from ITE chip.
  */
-#define MAX_SUPERIO_TEMPS   8
-#define MAX_SUPERIO_FANS    7
-#define MAX_SUPERIO_VOLTAGES 16
+static int ite_read_temp(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+{
+    if (channel < 0 || channel >= 6)
+        return -1;
+
+    BYTE val = 0;
+    sio_read_reg(dev, addr_port, data_port, ite_temp_regs[channel], &val);
+
+    int temp = (int)(signed char)val;
+
+    if (temp < -40 || temp > 150)
+        return -1;
+
+    return temp;
+}
+
+/*
+ * Read fan RPM from ITE chip.
+ */
+static int ite_read_fan(HANDLE dev, DWORD addr_port, DWORD data_port, int fan_num)
+{
+    if (fan_num < 0 || fan_num >= 6)
+        return -1;
+
+    BYTE low = 0, high = 0;
+    sio_read_reg(dev, addr_port, data_port, ite_fan_regs[fan_num][0], &low);
+    sio_read_reg(dev, addr_port, data_port, ite_fan_regs[fan_num][1], &high);
+
+    int count = (high << 8) | low;
+
+    if (count == 0 || count == 0xFFFF)
+        return 0;
+
+    return 1350000 / (count * 2);
+}
+
+/*
+ * Read voltage from ITE chip.
+ */
+static int ite_read_voltage(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+{
+    if (channel < 0 || channel >= 10)
+        return -1;
+
+    BYTE val = 0;
+    sio_read_reg(dev, addr_port, data_port, ite_voltage_regs[channel], &val);
+
+    return (int)(val * 16);  /* 16 mV per step (typical) */
+}
 
 /*
  * Read all available Super I/O sensors.
@@ -235,59 +338,68 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
     DWORD data_port = SIO_DATA_PORT;
 
     /* Detect chip */
-    WORD chip_id = sio_detect_chip(dev, addr_port, data_port);
+    sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
-    if (chip_id == 0) {
+    if (chip.type == SIO_CHIP_UNKNOWN) {
         addr_port = SIO_ALT_PORT;
         data_port = SIO_ALT_DATA;
-        chip_id = sio_detect_chip(dev, addr_port, data_port);
+        chip = sio_detect_chip(dev, addr_port, data_port);
     }
 
-    if (chip_id == 0) {
+    if (chip.type == SIO_CHIP_UNKNOWN) {
         result.ok = 0;
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
-                    "No Super I/O chip detected");
+                    "No Super I/O chip detected (ID: 0x%04X)", chip.id);
         return result;
     }
 
-    result.chip_id = chip_id;
+    result.chip_id = chip.id;
+    _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "%s", chip.name);
 
-    /* Identify chip */
-    BYTE high = (chip_id >> 8) & 0xFF;
-    BYTE low = chip_id & 0xFF;
-
-    if (chip_id == NCT6798D_CHIP_ID) {
-        _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "NCT6798D");
-    } else if (chip_id == NCT6799D_CHIP_ID) {
-        _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "NCT6799D");
-    } else {
-        _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE,
-                    "Nuvoton 0x%04X", chip_id);
-    }
-
-    /* Enter config mode to disable IO space lock */
+    /* Disable IO space lock */
     if (sio_enter(dev, addr_port)) {
         BYTE lock_val = 0;
         sio_read_reg(dev, addr_port, data_port, 0x28, &lock_val);
-        lock_val &= ~0x10;  /* Clear bit 4 (IO space lock) */
+        lock_val &= ~0x10;
         sio_write_reg(dev, addr_port, data_port, 0x28, lock_val);
         sio_exit(dev, addr_port);
     }
 
-    /* Read temperatures */
+    /* Read temperatures based on chip type */
     int i;
-    for (i = 0; i < 8 && result.count < MAX_SUPERIO_TEMPS; i++) {
-        int temp = nct6798_read_temp(dev, addr_port, data_port, i);
-        if (temp > 0) {
-            result.temperatures[result.count] = temp;
-            result.count++;
+    int max_temps = 0;
+
+    switch (chip.type) {
+    case SIO_CHIP_NUVOTON:
+        max_temps = 8;
+        for (i = 0; i < max_temps && result.count < HWSENSE_MAX_SUPERIO_TEMPS; i++) {
+            int temp = nct679x_read_temp(dev, addr_port, data_port, i);
+            if (temp > 0) {
+                result.temperatures[result.count] = temp;
+                result.count++;
+            }
         }
+        break;
+
+    case SIO_CHIP_ITE:
+        max_temps = 6;
+        for (i = 0; i < max_temps && result.count < HWSENSE_MAX_SUPERIO_TEMPS; i++) {
+            int temp = ite_read_temp(dev, addr_port, data_port, i);
+            if (temp > 0) {
+                result.temperatures[result.count] = temp;
+                result.count++;
+            }
+        }
+        break;
+
+    default:
+        break;
     }
 
     result.ok = (result.count > 0) ? 1 : 0;
     if (result.count == 0) {
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
-                    "No valid temperature readings from Super I/O chip");
+                    "No valid temperature readings from %s", chip.name);
     }
 
     return result;
@@ -312,24 +424,25 @@ hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx)
     DWORD data_port = SIO_DATA_PORT;
 
     /* Detect chip */
-    WORD chip_id = sio_detect_chip(dev, addr_port, data_port);
+    sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
-    if (chip_id == 0) {
+    if (chip.type == SIO_CHIP_UNKNOWN) {
         addr_port = SIO_ALT_PORT;
         data_port = SIO_ALT_DATA;
-        chip_id = sio_detect_chip(dev, addr_port, data_port);
+        chip = sio_detect_chip(dev, addr_port, data_port);
     }
 
-    if (chip_id == 0) {
+    if (chip.type == SIO_CHIP_UNKNOWN) {
         result.ok = 0;
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
                     "No Super I/O chip detected");
         return result;
     }
 
-    result.chip_id = chip_id;
+    result.chip_id = chip.id;
+    _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "%s", chip.name);
 
-    /* Enter config mode to disable IO space lock */
+    /* Disable IO space lock */
     if (sio_enter(dev, addr_port)) {
         BYTE lock_val = 0;
         sio_read_reg(dev, addr_port, data_port, 0x28, &lock_val);
@@ -338,21 +451,43 @@ hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx)
         sio_exit(dev, addr_port);
     }
 
-    /* Read fan speeds */
+    /* Read fan speeds based on chip type */
     int i;
-    for (i = 0; i < 7 && result.count < MAX_SUPERIO_FANS; i++) {
-        int rpm = nct6798_read_fan(dev, addr_port, data_port, i);
-        if (rpm >= 0) {
-            result.fan_rpms[result.count] = rpm;
-            result.fan_count++;
-            result.count++;
+    int max_fans = 0;
+
+    switch (chip.type) {
+    case SIO_CHIP_NUVOTON:
+        max_fans = 7;
+        for (i = 0; i < max_fans && result.fan_count < HWSENSE_MAX_SUPERIO_FANS; i++) {
+            int rpm = nct679x_read_fan(dev, addr_port, data_port, i);
+            if (rpm >= 0) {
+                result.fan_rpms[result.fan_count] = rpm;
+                result.fan_count++;
+                result.count++;
+            }
         }
+        break;
+
+    case SIO_CHIP_ITE:
+        max_fans = 6;
+        for (i = 0; i < max_fans && result.fan_count < HWSENSE_MAX_SUPERIO_FANS; i++) {
+            int rpm = ite_read_fan(dev, addr_port, data_port, i);
+            if (rpm > 0) {
+                result.fan_rpms[result.fan_count] = rpm;
+                result.fan_count++;
+                result.count++;
+            }
+        }
+        break;
+
+    default:
+        break;
     }
 
     result.ok = (result.fan_count > 0) ? 1 : 0;
     if (result.fan_count == 0) {
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
-                    "No valid fan readings from Super I/O chip");
+                    "No valid fan readings from %s", chip.name);
     }
 
     return result;
@@ -377,24 +512,25 @@ hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx)
     DWORD data_port = SIO_DATA_PORT;
 
     /* Detect chip */
-    WORD chip_id = sio_detect_chip(dev, addr_port, data_port);
+    sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
-    if (chip_id == 0) {
+    if (chip.type == SIO_CHIP_UNKNOWN) {
         addr_port = SIO_ALT_PORT;
         data_port = SIO_ALT_DATA;
-        chip_id = sio_detect_chip(dev, addr_port, data_port);
+        chip = sio_detect_chip(dev, addr_port, data_port);
     }
 
-    if (chip_id == 0) {
+    if (chip.type == SIO_CHIP_UNKNOWN) {
         result.ok = 0;
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
                     "No Super I/O chip detected");
         return result;
     }
 
-    result.chip_id = chip_id;
+    result.chip_id = chip.id;
+    _snprintf_s(result.chip_name, sizeof(result.chip_name), _TRUNCATE, "%s", chip.name);
 
-    /* Enter config mode to disable IO space lock */
+    /* Disable IO space lock */
     if (sio_enter(dev, addr_port)) {
         BYTE lock_val = 0;
         sio_read_reg(dev, addr_port, data_port, 0x28, &lock_val);
@@ -403,21 +539,43 @@ hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx)
         sio_exit(dev, addr_port);
     }
 
-    /* Read voltages */
+    /* Read voltages based on chip type */
     int i;
-    for (i = 0; i < 16 && result.voltage_count < MAX_SUPERIO_VOLTAGES; i++) {
-        int mv = nct6798_read_voltage(dev, addr_port, data_port, i);
-        if (mv > 0) {
-            result.voltages[result.voltage_count] = mv / 1000.0;  /* Convert to volts */
-            result.voltage_count++;
-            result.count++;
+    int max_volts = 0;
+
+    switch (chip.type) {
+    case SIO_CHIP_NUVOTON:
+        max_volts = 16;
+        for (i = 0; i < max_volts && result.voltage_count < HWSENSE_MAX_SUPERIO_VOLTAGES; i++) {
+            int mv = nct679x_read_voltage(dev, addr_port, data_port, i);
+            if (mv > 0) {
+                result.voltages[result.voltage_count] = mv / 1000.0;
+                result.voltage_count++;
+                result.count++;
+            }
         }
+        break;
+
+    case SIO_CHIP_ITE:
+        max_volts = 10;
+        for (i = 0; i < max_volts && result.voltage_count < HWSENSE_MAX_SUPERIO_VOLTAGES; i++) {
+            int mv = ite_read_voltage(dev, addr_port, data_port, i);
+            if (mv > 0) {
+                result.voltages[result.voltage_count] = mv / 1000.0;
+                result.voltage_count++;
+                result.count++;
+            }
+        }
+        break;
+
+    default:
+        break;
     }
 
     result.ok = (result.voltage_count > 0) ? 1 : 0;
     if (result.voltage_count == 0) {
         _snprintf_s(result.error, sizeof(result.error), _TRUNCATE,
-                    "No valid voltage readings from Super I/O chip");
+                    "No valid voltage readings from %s", chip.name);
     }
 
     return result;
