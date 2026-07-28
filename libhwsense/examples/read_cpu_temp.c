@@ -73,6 +73,13 @@ int main(void)
     else
         fprintf(stderr, "Package Power:      ERROR -- %s\n", power.error);
 
+    /* NVMe/SSD Temperature */
+    int nvme_temp = hwsense_nvme_temperature();
+    if (nvme_temp > 0)
+        printf("NVMe/SSD Temp:      %d C\n", nvme_temp);
+    else
+        printf("NVMe/SSD Temp:      N/A\n");
+
     /* IOCTL scan diagnostic - use existing driver handle */
     printf("\n--- IOCTL Memory Read Scan ---\n");
     {

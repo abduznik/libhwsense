@@ -14,6 +14,7 @@ add_library(hwsense STATIC
     src/cpu/amd_svi2.c
     src/cpu/amd_smu.c
     src/cpu/intel.c
+    src/storage/storage.c
 )
 
 target_include_directories(hwsense PUBLIC include)

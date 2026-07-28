@@ -108,6 +108,12 @@ int hwsense_smu_diag(hwsense_ctx_t *ctx,
  */
 float hwsense_amd_pmtable_power(hwsense_ctx_t *ctx);
 
+/*
+ * NVMe/SSD temperature reading via SMART.
+ * Returns temperature in Celsius, or -1 on failure.
+ */
+int hwsense_nvme_temperature(void);
+
 #ifdef __cplusplus
 }
 #endif
