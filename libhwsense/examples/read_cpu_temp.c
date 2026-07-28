@@ -12,6 +12,7 @@
 #include "../src/core/win_sysstats.h"
 #include "../src/motherboard/ec.h"
 #include "../src/core/wmi.h"
+#include "../src/cpu/cpu_diag.h"
 
 int main(void)
 {
@@ -42,6 +43,13 @@ int main(void)
     hwsense_ctx_t *ctx = hwsense_init();
     if (!ctx)
         return 1;
+
+    /* CPU Diagnostics */
+    printf("--- CPU Diagnostics ---\n");
+    {
+        cpu_diag_result_t diag = cpu_diag_detect();
+        cpu_diag_print(&diag);
+    }
 
     /* Header */
     time(&now);
@@ -132,13 +140,32 @@ int main(void)
         printf("Core Clock:          N/A\n");
     printf("\n");
 
-    /* ── GPU Temperature ── */
+    /* ── GPU Information ── */
     printf("--- GPU ---\n");
-    hwsense_gpu_result_t gpu = hwsense_gpu_temperature(0);
-    if (gpu.ok)
-        printf("GPU Temp:            %d C  (%s)\n", gpu.temperature, gpu.name);
-    else
-        printf("GPU Temp:            N/A\n");
+    {
+        hwsense_gpu_info_t gpu_info = hwsense_gpu_info(0);
+        if (gpu_info.ok) {
+            printf("GPU:                %s\n", gpu_info.name);
+            printf("Temperature:        %d C\n", gpu_info.temperature);
+            if (gpu_info.vram_total_mb > 0)
+                printf("VRAM:               %d / %d MB (%d%% used)\n",
+                       gpu_info.vram_used_mb, gpu_info.vram_total_mb,
+                       gpu_info.vram_total_mb > 0 ? (gpu_info.vram_used_mb * 100 / gpu_info.vram_total_mb) : 0);
+            if (gpu_info.power_usage_w > 0)
+                printf("Power:              %d W (limit: %d W)\n",
+                       gpu_info.power_usage_w, gpu_info.power_limit_w);
+            if (gpu_info.gpu_load > 0)
+                printf("GPU Load:           %d%%\n", gpu_info.gpu_load);
+            if (gpu_info.mem_load > 0)
+                printf("Memory Load:        %d%%\n", gpu_info.mem_load);
+            if (gpu_info.clock_mhz > 0)
+                printf("Clock:              %d MHz\n", gpu_info.clock_mhz);
+            if (gpu_info.mem_clock_mhz > 0)
+                printf("Memory Clock:       %d MHz\n", gpu_info.mem_clock_mhz);
+        } else {
+            printf("GPU:                N/A\n");
+        }
+    }
     printf("\n");
 
     /* ── Drive Stats ── */

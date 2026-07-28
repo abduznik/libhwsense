@@ -176,11 +176,35 @@ typedef struct {
 } hwsense_gpu_result_t;
 
 /*
+ * Comprehensive GPU information.
+ */
+typedef struct {
+    int ok;
+    int temperature;
+    int vram_used_mb;
+    int vram_total_mb;
+    int power_usage_w;
+    int power_limit_w;
+    int gpu_load;
+    int mem_load;
+    int clock_mhz;
+    int mem_clock_mhz;
+    char name[128];
+    char error[256];
+} hwsense_gpu_info_t;
+
+/*
  * Read GPU temperature.
  * Tries NVIDIA NVML first, then AMD ADL.
  * gpu_index: which GPU to read (0 = first).
  */
 hwsense_gpu_result_t hwsense_gpu_temperature(int gpu_index);
+
+/*
+ * Read comprehensive GPU information.
+ * Returns temperature, VRAM, power, load, and clock speeds.
+ */
+hwsense_gpu_info_t hwsense_gpu_info(int gpu_index);
 
 /*
  * NVMe/SSD temperature reading via SMART.

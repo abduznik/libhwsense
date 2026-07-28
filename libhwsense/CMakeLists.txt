@@ -17,6 +17,7 @@ add_library(hwsense STATIC
     src/cpu/amd_svi2.c
     src/cpu/amd_smu.c
     src/cpu/intel.c
+    src/cpu/cpu_diag.c
     src/storage/storage.c
     src/motherboard/superio.c
     src/motherboard/ec.c
