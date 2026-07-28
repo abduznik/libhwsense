@@ -9,6 +9,7 @@ endif()
 # Static library: libhwsense
 add_library(hwsense STATIC
     src/core/driver.c
+    src/core/api.c
     src/cpu/amd_zen.c
     src/cpu/intel.c
 )

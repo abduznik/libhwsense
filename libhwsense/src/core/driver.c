@@ -3,17 +3,13 @@
  *
  * Installs WinRing0x64.sys as a kernel service via the Service Control Manager,
  * opens a device handle for DeviceIoControl calls, and tears everything down
- * on shutdown.  Faithfully ports the Python driver management code.
+ * on shutdown.
  */
 
 #include "hwsense_internal.h"
 #include "ioctl_codes.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-/* ── Helpers ───────────────────────────────────────────────────────── */
-
-/* ── Helpers ───────────────────────────────────────────────────────────── */
 
 /*
  * Locate WinRing0x64.sys next to the running .exe, then in CWD.
@@ -24,7 +20,6 @@ static BOOL find_driver_file(WCHAR *out, DWORD out_chars)
     /* 1) next to the executable */
     DWORD n = GetModuleFileNameW(NULL, out, out_chars);
     if (n > 0 && n < out_chars) {
-        /* strip filename, append WinRing0x64.sys */
         WCHAR *slash = wcsrchr(out, L'\\');
         if (slash) {
             slash[1] = L'\0';
@@ -67,13 +62,13 @@ static SC_HANDLE install_and_start_driver(SC_HANDLE scm, const WCHAR *driver_pat
     for (i = 0; i < retries; i++) {
         svc = CreateServiceW(
             scm,
-            WINRING0_SERVICE_NAME,      /* lpServiceName        */
-            WINRING0_SERVICE_NAME,      /* lpDisplayName        */
-            SERVICE_ALL_ACCESS,         /* dwDesiredAccess      */
-            SERVICE_KERNEL_DRIVER,      /* dwServiceType        */
-            SERVICE_DEMAND_START,       /* dwStartType          */
-            SERVICE_ERROR_NORMAL,       /* dwErrorControl       */
-            driver_path,                /* lpBinaryPathName     */
+            WINRING0_SERVICE_NAME,
+            WINRING0_SERVICE_NAME,
+            SERVICE_ALL_ACCESS,
+            SERVICE_KERNEL_DRIVER,
+            SERVICE_DEMAND_START,
+            SERVICE_ERROR_NORMAL,
+            driver_path,
             NULL, NULL, NULL, NULL, NULL
         );
 
@@ -83,7 +78,6 @@ static SC_HANDLE install_and_start_driver(SC_HANDLE scm, const WCHAR *driver_pat
         DWORD err = GetLastError();
 
         if (err == ERROR_SERVICE_EXISTS) {
-            /* Service from a previous run still registered — open it. */
             svc = OpenServiceW(scm, WINRING0_SERVICE_NAME, SERVICE_ALL_ACCESS);
             if (!svc) {
                 fprintf(stderr, "OpenService failed (error %lu)\n", GetLastError());
@@ -93,19 +87,6 @@ static SC_HANDLE install_and_start_driver(SC_HANDLE scm, const WCHAR *driver_pat
         }
 
         if (err == ERROR_SERVICE_MARKED_FOR_DELETE) {
-            /*
-             * The previous run's cleanup called DeleteService() but the SCM
-             * hasn't finished removing it yet.  The service is in limbo:
-             * marked for deletion, but still registered because some handle
-             * is still open or the SCM hasn't flushed it yet.
-             *
-             * Force the deletion forward:
-             *   1. Open the stale service
-             *   2. Stop it (if still running) to release the driver
-             *   3. Close our handle — this is the key step; the SCM waits
-             *      for ALL handles to be closed before completing deletion
-             *   4. Wait for the SCM to finish
-             */
             fprintf(stderr, "  [retry] Service marked for delete, forcing cleanup... (%d/%d)\n",
                     i + 1, retries);
 
@@ -116,7 +97,6 @@ static SC_HANDLE install_and_start_driver(SC_HANDLE scm, const WCHAR *driver_pat
                 CloseServiceHandle(stale);
             }
 
-            /* Give the SCM time to complete the deletion. */
             Sleep(2000);
             continue;
         }
@@ -131,7 +111,6 @@ static SC_HANDLE install_and_start_driver(SC_HANDLE scm, const WCHAR *driver_pat
         return NULL;
     }
 
-    /* Start the service (loads the .sys into kernel memory). */
     if (!StartServiceW(svc, 0, NULL)) {
         DWORD err = GetLastError();
         if (err != ERROR_SERVICE_ALREADY_RUNNING) {
@@ -149,7 +128,7 @@ static HANDLE open_driver_handle(void)
     HANDLE h = CreateFileW(
         WINRING0_DEVICE_PATH,
         GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,  /* Match OHM's FileShare.ReadWrite */
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL,
@@ -193,7 +172,6 @@ hwsense_ctx_t *hwsense_init(void)
 
     HANDLE dev = open_driver_handle();
     if (dev == INVALID_HANDLE_VALUE) {
-        /* Clean up service if device open fails. */
         ControlService(svc, SERVICE_CONTROL_STOP, NULL);
         DeleteService(svc);
         CloseServiceHandle(svc);
@@ -238,161 +216,4 @@ void hwsense_shutdown(hwsense_ctx_t *ctx)
         CloseServiceHandle(ctx->scm_handle);
 
     free(ctx);
-}
-
-/*
- * Dispatch to Intel or AMD temperature reading based on CPU vendor.
- * Declared in cpu/amd_zen.c and cpu/intel.c.
- */
-extern int   hwsense_detect_vendor(void); /* returns 'I' for Intel, 'A' for AMD */
-extern hwsense_temp_result_t hwsense_amd_package_temp(HANDLE driver_handle);
-extern hwsense_temp_result_t hwsense_intel_core_temp(HANDLE driver_handle);
-extern hwsense_voltage_result_t hwsense_amd_core_voltage(HANDLE driver_handle);
-extern hwsense_voltage_result_t hwsense_amd_soc_voltage(HANDLE driver_handle);
-extern hwsense_voltage_result_t hwsense_amd_package_power(HANDLE driver_handle);
-extern int hwsense_amd_read_smn(HANDLE driver_handle, DWORD smn_addr, DWORD *out_value);
-extern int hwsense_amd_smu_diag(HANDLE driver_handle,
-                               char *out_name, int name_len,
-                               DWORD *out_smu_ver, DWORD *out_pm_ver,
-                               DWORD64 *out_dram_base);
-extern float hwsense_amd_pmtable_power_raw(HANDLE driver_handle);
-
-hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)
-{
-    hwsense_temp_result_t r = {0};
-
-    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE) {
-        r.ok = 0;
-        _snprintf_s(r.error, sizeof(r.error), _TRUNCATE, "Invalid context or driver handle");
-        return r;
-    }
-
-    int vendor = hwsense_detect_vendor();
-
-    if (vendor == 'I')
-        return hwsense_intel_core_temp(ctx->driver_handle);
-
-    if (vendor == 'A')
-        return hwsense_amd_package_temp(ctx->driver_handle);
-
-    r.ok = 0;
-    _snprintf_s(r.error, sizeof(r.error), _TRUNCATE,
-                "Unknown CPU vendor (registry VendorIdentifier not Intel/AMD)");
-    return r;
-}
-
-/*
- * Dispatch to Intel or AMD core voltage reading based on CPU vendor.
- * AMD: SVI2 Plane0 via SMN (core voltage)
- * Intel: MSR 0x198 IA32_PERF_STATUS (VID in EDX[15:0])
- */
-hwsense_voltage_result_t hwsense_cpu_core_voltage(hwsense_ctx_t *ctx)
-{
-    hwsense_voltage_result_t r = {0};
-
-    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE) {
-        r.ok = 0;
-        _snprintf_s(r.error, sizeof(r.error), _TRUNCATE, "Invalid context or driver handle");
-        return r;
-    }
-
-    int vendor = hwsense_detect_vendor();
-
-    if (vendor == 'A')
-        return hwsense_amd_core_voltage(ctx->driver_handle);
-
-    if (vendor == 'I') {
-        /* Intel: read MSR 0x198 (IA32_PERF_STATUS), EDX[15:0] = VID */
-        /* For now, return not-implemented — Intel voltage will be added later */
-        r.ok = 0;
-        _snprintf_s(r.error, sizeof(r.error), _TRUNCATE,
-                    "Intel core voltage not yet implemented (MSR 0x198)");
-        return r;
-    }
-
-    r.ok = 0;
-    _snprintf_s(r.error, sizeof(r.error), _TRUNCATE,
-                "Unknown CPU vendor");
-    return r;
-}
-
-/*
- * AMD SoC voltage (VDDCR_SOC) via SVI2 Plane1.
- * Only available on AMD — returns error on Intel.
- */
-hwsense_voltage_result_t hwsense_amd_soc_voltage_dispatch(hwsense_ctx_t *ctx)
-{
-    hwsense_voltage_result_t r = {0};
-
-    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE) {
-        r.ok = 0;
-        _snprintf_s(r.error, sizeof(r.error), _TRUNCATE, "Invalid context or driver handle");
-        return r;
-    }
-
-    int vendor = hwsense_detect_vendor();
-
-    if (vendor == 'A')
-        return hwsense_amd_soc_voltage(ctx->driver_handle);
-
-    r.ok = 0;
-    _snprintf_s(r.error, sizeof(r.error), _TRUNCATE,
-                "SoC voltage is AMD-only (SVI2 Plane1)");
-    return r;
-}
-
-/*
- * AMD CPU package power via SVI2 telemetry.
- * P = V_core * I_core + V_soc * I_soc
- * Only available on AMD.
- */
-hwsense_voltage_result_t hwsense_cpu_package_power(hwsense_ctx_t *ctx)
-{
-    hwsense_voltage_result_t r = {0};
-
-    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE) {
-        r.ok = 0;
-        _snprintf_s(r.error, sizeof(r.error), _TRUNCATE, "Invalid context or driver handle");
-        return r;
-    }
-
-    int vendor = hwsense_detect_vendor();
-
-    if (vendor == 'A')
-        return hwsense_amd_package_power(ctx->driver_handle);
-
-    r.ok = 0;
-    _snprintf_s(r.error, sizeof(r.error), _TRUNCATE,
-                "Package power via SVI2 is AMD-only");
-    return r;
-}
-
-int hwsense_read_smn_diag(hwsense_ctx_t *ctx, unsigned int smn_addr, unsigned int *out_value)
-{
-    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE)
-        return 0;
-    return hwsense_amd_read_smn(ctx->driver_handle, (DWORD)smn_addr, (DWORD *)out_value);
-}
-
-int hwsense_smu_diag(hwsense_ctx_t *ctx,
-                     char *out_name, int name_len,
-                     unsigned int *out_smu_ver, unsigned int *out_pm_ver,
-                     unsigned long long *out_dram_base)
-{
-    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE)
-        return 0;
-    return hwsense_amd_smu_diag(ctx->driver_handle, out_name, name_len,
-                                (DWORD *)out_smu_ver, (DWORD *)out_pm_ver,
-                                (DWORD64 *)out_dram_base);
-}
-
-float hwsense_amd_pmtable_power(hwsense_ctx_t *ctx)
-{
-    if (!ctx)
-        return -1.0f;
-
-    if (ctx->driver_handle && ctx->driver_handle != INVALID_HANDLE_VALUE)
-        return hwsense_amd_pmtable_power_raw(ctx->driver_handle);
-
-    return -1.0f;
 }
