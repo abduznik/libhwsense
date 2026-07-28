@@ -29,3 +29,6 @@ cmake_install.cmake
 x64/
 Release/
 Debug/
+test_extract/
+.claude/
+*.zip
