@@ -1,18 +1,20 @@
-# libhwsense — CPU Temperature via WinRing0
+# libhwsense — Hardware Sensor Library
 
-Read CPU temperature directly from hardware using Model-Specific Registers (Intel) or SMN via PCI config space (AMD), bypassing WMI entirely.
+A lightweight C library for reading hardware sensors on Windows. Supports Intel and AMD CPUs, NVIDIA and AMD GPUs, and system metrics.
+
+**For usage examples in Python, C#, and Rust/Tauri, see [USAGE.md](USAGE.md)**
 
 ## What We Built
 
-A C library (`hwsense.lib`) and CLI tool (`read_cpu_temp.exe`) that read CPU temperature by communicating directly with the WinRing0 kernel driver via `DeviceIoControl`. Also includes a Python prototype (`cpu_temp_msr.py`) that does the same thing.
+A DLL (`hwsense.dll`) and CLI tool (`read_cpu_temp.exe`) that read hardware sensors by communicating directly with the WinRing0 kernel driver via `DeviceIoControl`.
 
-**Supported CPUs:**
-- **Intel:** Per-core temperature via MSR 0x19C (IA32_THERM_STATUS) + MSR 0x1A2 (IA32_TEMPERATURE_TARGET)
-- **AMD:** Package temperature (Tctl) via SMN register 0x00059800 through PCI config space (Zen/Zen2/Zen3/Zen4)
-- **AMD:** Core voltage (VDDCR_CPU) via SVI2 Plane0 (SMN 0x0005A010)
-- **AMD:** SoC voltage (VDDCR_SOC) via SVI2 Plane1 (SMN 0x0005A00C)
+**Supported Hardware:**
+- **CPU:** Intel (MSR) and AMD (SMN) temperature, voltage, frequency, power
+- **GPU:** NVIDIA (NVML) and AMD (ADL) temperature, VRAM, power, load
+- **System:** Memory, CPU load, disk usage, network stats, fan speeds
+- **Drives:** NVMe/SSD temperature via SMART
 
-**Tested on:** AMD Ryzen 5 4500 (Zen 2 / Renoir, Family 17h Model 60h) — reports 46.8°C Tctl
+**Tested on:** AMD Ryzen 5 4500 + NVIDIA RTX 4060 Ti, Intel i5-1235U
 
 ---
 
@@ -240,23 +242,39 @@ F:\Coding\sensors-test\libhwsense\build\Release\read_cpu_temp.exe
 ```
 libhwsense/
 ├── include/
-│   └── hwsense.h              Public API (hwsense_init, shutdown, cpu_package_temp, cpu_core_voltage)
+│   ├── hwsense.h              Public API (all exported functions)
+│   └── hwsense_unified.h      Unified API for easy cross-platform use
 ├── src/
 │   ├── core/
-│   │   ├── ioctl_codes.h      IOCTL constants, PCI structs, MSR/SMN/SVI2 defines
-│   │   └── driver.c           SCM lifecycle, DeviceIoControl wrapper, vendor dispatch
-│   └── cpu/
-│       ├── amd_zen.c          SMN read via PCI config → Tctl formula, SVI2 voltage
-│       └── intel.c            MSR 0x19C/0x1A2 per-core temp with thread affinity
+│   │   ├── driver.c           WinRing0 driver lifecycle
+│   │   ├── api.c              Vendor dispatch (AMD/Intel)
+│   │   ├── wmi.c              WMI sensor queries
+│   │   ├── win_sysstats.c     System stats (memory, CPU, disk)
+│   │   └── hwsense_unified.c  Unified API implementation
+│   ├── cpu/
+│   │   ├── amd_zen.c          AMD SMN/SVI2 temperature/voltage
+│   │   ├── amd_svi2.c         AMD SVI2 voltage reading
+│   │   ├── amd_smu.c          AMD SMU mailbox protocol
+│   │   ├── intel.c            Intel MSR temperature/power
+│   │   └── cpu_diag.c         CPU feature detection
+│   ├── gpu/
+│   │   └── gpu.c              NVIDIA NVML + AMD ADL
+│   ├── storage/
+│   │   └── storage.c          NVMe/SSD SMART temperature
+│   └── motherboard/
+│       ├── superio.c          Super I/O chip support
+│       └── ec.c               ASUS Embedded Controller
 ├── examples/
-│   └── read_cpu_temp.c        CLI: admin check → init → read → print → shutdown
-├── CMakeLists.txt
-└── build/Release/
-    ├── read_cpu_temp.exe
-    ├── hwsense.lib
-    └── WinRing0x64.sys         (must be placed here or next to the exe)
-
-cpu_temp_msr.py                 Python prototype (same logic, ctypes-based)
+│   ├── read_cpu_temp.c        Full sensor report CLI
+│   ├── read_sensors.c         Simple unified API example
+│   └── read_homelab_sensors.c Linux sensor reader
+├── CMakeLists.txt             Builds hwsense.dll
+├── LICENSE                    MIT + BSD 2-Clause (WinRing0)
+├── USAGE.md                   Python/C#/Rust usage examples
+└── build/
+    └── bin/Release/
+        ├── hwsense.dll        Main library
+        └── read_cpu_temp.exe  Example CLI
 ```
 
 ---
