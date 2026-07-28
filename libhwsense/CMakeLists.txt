@@ -6,8 +6,11 @@ if(NOT WIN32)
     message(FATAL_ERROR "libhwsense requires Windows (WinRing0 kernel driver)")
 endif()
 
-# Static library: libhwsense
-add_library(hwsense STATIC
+# Define HWSENSE_DLL_EXPORTS for DLL builds
+add_definitions(-DHWSENSE_DLL_EXPORTS)
+
+# Shared library: hwsense.dll
+add_library(hwsense SHARED
     src/core/driver.c
     src/core/api.c
     src/core/win_sysstats.c
@@ -29,6 +32,13 @@ target_include_directories(hwsense PRIVATE src)
 
 # Link Win32 APIs and COM libraries
 target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32 ole32 oleaut32 wbemuuid)
+
+# Set output properties
+set_target_properties(hwsense PROPERTIES
+    OUTPUT_NAME "hwsense"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
 
 # Example: read_cpu_temp
 add_executable(read_cpu_temp examples/read_cpu_temp.c)

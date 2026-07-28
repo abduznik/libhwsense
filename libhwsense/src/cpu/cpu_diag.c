@@ -6,6 +6,7 @@
  */
 
 #include "../core/hwsense_internal.h"
+#include "cpu_diag.h"
 #include <stdio.h>
 #include <intrin.h>
 
@@ -24,35 +25,6 @@
 #define CPUID_FEATURE_RAPL     (1 << 13)   /* EBX bit 13 (RAPL) - Intel specific */
 #define CPUID_FEATURE_APERF    (1 << 1)    /* ECX bit 1 (APERF/MPERF) - Intel specific */
 #define CPUID_FEATURE_INV_TSC  (1 << 8)    /* EDX bit 8 (Invariant TSC) */
-
-/* AMD-specific CPUID leaves */
-#define AMD_CPUID_EXT_FN80000008  0x80000008
-#define AMD_CPUID_EXT_FN80000001  0x80000001
-
-/* CPU result structure */
-typedef struct {
-    int ok;
-    char vendor[16];          /* "GenuineIntel" or "AuthenticAMD" */
-    char brand[64];           /* CPU brand string */
-    int family;               /* CPU family */
-    int model;                /* CPU model */
-    int stepping;             /* CPU stepping */
-    int ext_family;           /* Extended family */
-    int ext_model;            /* Extended model */
-    int cores;                /* Physical cores */
-    int threads;              /* Logical threads */
-    int max_threads_per_core; /* Max threads per core */
-    int tsc_invariant;        /* Invariant TSC */
-    int rapl_support;         /* RAPL support */
-    int hwp_support;          /* Hardware P-states */
-    int aperf_mperf;          /* APERF/MPERF support */
-    int msr_support;          /* MSR access support */
-    int thermal_monitor;      /* Thermal Monitor */
-    int family_known;         /* Known family for sensor support */
-    char supported_sensors[256]; /* List of supported sensors */
-    char warnings[512];       /* Warnings about unsupported features */
-    char error[256];
-} cpu_diag_result_t;
 
 /*
  * Run CPUID instruction.

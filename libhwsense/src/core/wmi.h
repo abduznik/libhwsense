@@ -1,28 +1,17 @@
-/*
- * wmi.h — WMI sensor access API.
- */
-
 #ifndef WMI_H
 #define WMI_H
 
+#include "../../include/hwsense.h"
+
 /* Initialize/shutdown WMI */
-int wmi_init(void);
-void wmi_shutdown(void);
+HWSENSE_API int wmi_init(void);
+HWSENSE_API void wmi_shutdown(void);
 
 /* Thermal zones */
-int wmi_read_thermal_zones(double *temps, int max_temps, char names[][64], int max_names);
+HWSENSE_API int wmi_read_thermal_zones(double *temps, int max_temps, char names[][64], int max_names);
 
-/* CPU info */
-typedef struct {
-    char name[128];
-    int max_clock_mhz;
-    int current_clock_mhz;
-    int voltage_mv;
-    int load_percent;
-    int temperature;
-} wmi_cpu_info_t;
-
-int wmi_read_cpu_info(wmi_cpu_info_t *info);
+/* CPU info - wmi_cpu_info_t defined in hwsense.h */
+HWSENSE_API int wmi_read_cpu_info(wmi_cpu_info_t *info);
 
 /* Fan speeds */
 typedef struct {
@@ -31,7 +20,7 @@ typedef struct {
     int desired_speed;
 } wmi_fan_info_t;
 
-int wmi_read_fans(wmi_fan_info_t *fans, int max_fans);
+HWSENSE_API int wmi_read_fans(wmi_fan_info_t *fans, int max_fans);
 
 /* Voltage probes */
 typedef struct {
@@ -41,6 +30,6 @@ typedef struct {
     double min_voltage;
 } wmi_voltage_info_t;
 
-int wmi_read_voltages(wmi_voltage_info_t *voltages, int max_voltages);
+HWSENSE_API int wmi_read_voltages(wmi_voltage_info_t *voltages, int max_voltages);
 
 #endif /* WMI_H */
