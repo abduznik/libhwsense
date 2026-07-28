@@ -10,6 +10,7 @@ endif()
 add_library(hwsense STATIC
     src/core/driver.c
     src/core/api.c
+    src/core/win_sysstats.c
     src/cpu/amd_zen.c
     src/cpu/amd_svi2.c
     src/cpu/amd_smu.c

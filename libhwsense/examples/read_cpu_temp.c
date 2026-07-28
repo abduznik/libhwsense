@@ -1,13 +1,15 @@
 /*
- * read_cpu_temp.c - CLI that reads CPU sensors via libhwsense.
- * Must run as Administrator.
+ * read_cpu_temp.c - CLI that reads all system sensors via libhwsense.
+ * Must run as Administrator for hardware sensor access.
  */
 
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "hwsense.h"
 #include "../src/core/ioctl_codes.h"
+#include "../src/core/win_sysstats.h"
 
 int main(void)
 {
@@ -17,7 +19,11 @@ int main(void)
     char smu_name[64] = {0};
     unsigned int smu_ver = 0, pm_ver = 0;
     unsigned long long dram_base = 0;
+    time_t now;
+    struct tm *tm_info;
+    char time_buf[64];
 
+    /* Admin check */
     if (AllocateAndInitializeSid(&nt_auth, 2,
             SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
             0, 0, 0, 0, 0, 0, &admin_group))
@@ -35,12 +41,39 @@ int main(void)
     if (!ctx)
         return 1;
 
-    /* Temperature */
+    /* Header */
+    time(&now);
+    tm_info = localtime(&now);
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
+    printf("=== System Sensor Report ===\n");
+    printf("Timestamp: %s\n\n", time_buf);
+
+    /* ── System Info ── */
+    {
+        win_mem_stats_t mem;
+        win_cpu_load_t cpu_load;
+        win_uptime_t uptime;
+
+        uptime = win_get_uptime();
+        printf("Uptime: %d days, %d hours, %d minutes\n",
+               uptime.days, uptime.hours, uptime.minutes);
+
+        if (win_get_cpu_load(&cpu_load))
+            printf("CPU Load: %.1f%% (%d cores)\n", cpu_load.percent, cpu_load.num_cpus);
+
+        if (win_get_mem_stats(&mem))
+            printf("Memory: %.1f / %.1f GB (%d%% used)\n",
+                   mem.used_gb, mem.total_gb, mem.percent_used);
+    }
+    printf("\n");
+
+    /* ── CPU Temperature ── */
+    printf("--- CPU Temperature ---\n");
     hwsense_temp_result_t pkg = hwsense_cpu_package_temp(ctx);
     if (pkg.ok)
         printf("CPU Package (Tctl):  %.1f C\n", pkg.celsius);
     else
-        fprintf(stderr, "CPU Package: ERROR -- %s\n", pkg.error);
+        printf("CPU Package:         N/A\n");
 
     /* CCD temps */
     hwsense_ccd_temps_t ccd = hwsense_amd_ccd_temps(ctx);
@@ -48,132 +81,95 @@ int main(void)
         int i;
         for (i = 0; i < HWSENSE_MAX_CCD; i++)
             if (ccd.available[i])
-                printf("CCD %d:              %.1f C\n", i, ccd.celsius[i]);
+                printf("  CCD %d:             %.1f C\n", i, ccd.celsius[i]);
     } else {
-        printf("CCD temps:           Not available on this CPU\n");
+        printf("CCD temps:           N/A\n");
     }
+    printf("\n");
 
-    /* Voltages */
+    /* ── CPU Voltage & Power ── */
+    printf("--- CPU Voltage & Power ---\n");
     hwsense_voltage_result_t vcore = hwsense_cpu_core_voltage(ctx);
     if (vcore.ok)
-        printf("CPU Core V:         %.4f V  (%.1f A)\n", vcore.volts, vcore.amps);
+        printf("Core Voltage:        %.4f V  (%.1f A)\n", vcore.volts, vcore.amps);
     else
-        fprintf(stderr, "CPU Core V:         ERROR -- %s\n", vcore.error);
+        printf("Core Voltage:        N/A\n");
 
     hwsense_voltage_result_t vsoc = hwsense_amd_soc_voltage_dispatch(ctx);
     if (vsoc.ok)
-        printf("SoC V:              %.4f V  (%.1f A)\n", vsoc.volts, vsoc.amps);
+        printf("SoC Voltage:         %.4f V  (%.1f A)\n", vsoc.volts, vsoc.amps);
     else
-        fprintf(stderr, "SoC V:              ERROR -- %s\n", vsoc.error);
+        printf("SoC Voltage:         N/A\n");
 
-    /* Package Power */
-    hwsense_voltage_result_t power = hwsense_cpu_package_power(ctx);
-    if (power.ok)
-        printf("Package Power:      %.2f W  (%.1f A total)\n", power.volts, power.amps);
-    else
-        fprintf(stderr, "Package Power:      ERROR -- %s\n", power.error);
-
-    /* NVMe/SSD Temperature */
-    int nvme_temp = hwsense_nvme_temperature();
-    if (nvme_temp > 0)
-        printf("NVMe/SSD Temp:      %d C\n", nvme_temp);
-    else
-        printf("NVMe/SSD Temp:      N/A\n");
-
-    /* CPU Core Clock */
-    int clock = hwsense_cpu_core_clock(ctx);
-    if (clock > 0)
-        printf("CPU Core Clock:     %d MHz\n", clock);
-    else
-        printf("CPU Core Clock:     N/A\n");
-
-    /* CPU Core Voltage (new) */
-    double vcore_val = hwsense_cpu_core_voltage_value(ctx);
-    if (vcore_val > 0)
-        printf("CPU Core V (raw):  %.4f V\n", vcore_val);
-    else
-        printf("CPU Core V (raw):  N/A\n");
-
-    /* Package Power (new) */
     double power_w = hwsense_cpu_package_power_watts(ctx);
     if (power_w > 0)
-        printf("Package Power (raw): %.2f W\n", power_w);
+        printf("Package Power:       %.2f W\n", power_w);
     else
-        printf("Package Power (raw): N/A\n");
+        printf("Package Power:       N/A\n");
 
-    /* Super I/O Motherboard Temps */
+    int clock = hwsense_cpu_core_clock(ctx);
+    if (clock > 0)
+        printf("Core Clock:          %d MHz\n", clock);
+    else
+        printf("Core Clock:          N/A\n");
+    printf("\n");
+
+    /* ── GPU Temperature ── */
+    printf("--- GPU ---\n");
+    hwsense_gpu_result_t gpu = hwsense_gpu_temperature(0);
+    if (gpu.ok)
+        printf("GPU Temp:            %d C  (%s)\n", gpu.temperature, gpu.name);
+    else
+        printf("GPU Temp:            N/A\n");
+    printf("\n");
+
+    /* ── Drive Stats ── */
+    printf("--- Drive Stats ---\n");
+    {
+        int nvme_temp = hwsense_nvme_temperature();
+        if (nvme_temp > 0)
+            printf("NVMe/SSD Temp:       %d C\n", nvme_temp);
+        else
+            printf("NVMe/SSD Temp:       N/A\n");
+    }
+
+    /* Disk usage */
+    {
+        win_disk_stats_t disks[MAX_WIN_DISKS];
+        int disk_count = win_get_disk_stats(disks, MAX_WIN_DISKS);
+        int i;
+        for (i = 0; i < disk_count; i++) {
+            printf("  %s: %lld GB / %lld GB (%d%% used)\n",
+                   disks[i].name,
+                   disks[i].total_size_gb - disks[i].free_gb,
+                   disks[i].total_size_gb,
+                   disks[i].percent_used);
+        }
+    }
+
+    /* Super I/O */
     hwsense_superio_result_t sio = hwsense_superio_temps(ctx);
     if (sio.ok && sio.count > 0) {
-        printf("Super I/O (%s):     ", sio.chip_name);
+        printf("Super I/O (%s):    ", sio.chip_name);
         int i;
         for (i = 0; i < sio.count; i++)
             printf("%d C  ", sio.temperatures[i]);
         printf("\n");
-    } else {
-        printf("Super I/O:          N/A\n");
     }
+    printf("\n");
 
-    /* GPU Temperature */
-    hwsense_gpu_result_t gpu = hwsense_gpu_temperature(0);
-    if (gpu.ok)
-        printf("GPU Temp (%s):      %d C\n", gpu.name, gpu.temperature);
-    else
-        printf("GPU Temp:           N/A\n");
-
-    /* IOCTL scan diagnostic - use existing driver handle */
-    printf("\n--- IOCTL Memory Read Scan ---\n");
-    {
-        extern int hwsense_read_smn_diag(hwsense_ctx_t *ctx, unsigned int smn_addr, unsigned int *out_value);
-        /* We need the driver handle from ctx - let's test via the read_physical_memory path */
-        BYTE inp[16];
-        BYTE out[4];
-        DWORD br;
-        *(DWORD64*)&inp[0] = 0x10000;
-        *(DWORD*)&inp[8] = 4;
-        *(DWORD*)&inp[12] = 1;
-
-        printf("  IOCTL_OLS_READ_MSR = 0x%08X\n", IOCTL_OLS_READ_MSR);
-        printf("  IOCTL_OLS_READ_PCI_CONFIG = 0x%08X\n", IOCTL_OLS_READ_PCI_CONFIG);
-        printf("  CTL_CODE(40000,0x841,0,0) = 0x%08X  (MEM ANY BUF)\n", CTL_CODE(40000, 0x841, 0, 0));
-        printf("  CTL_CODE(40000,0x841,0,1) = 0x%08X  (MEM READ BUF)\n", CTL_CODE(40000, 0x841, 0, 1));
-    }
-
-    /* SMU Diagnostics */
-    printf("\n--- SMU Diagnostics ---\n");
+    /* ── SMU Diagnostics (AMD only) ── */
     if (hwsense_smu_diag(ctx, smu_name, sizeof(smu_name), &smu_ver, &pm_ver, &dram_base)) {
+        printf("--- SMU Diagnostics ---\n");
         printf("  CPU Codename:     %s\n", smu_name);
         printf("  SMU Version:      0x%08X\n", smu_ver);
         printf("  PM Table Version: 0x%08X\n", pm_ver);
         printf("  DRAM Base:        0x%016llX\n", dram_base);
-    } else {
-        printf("  SMU diag failed (not AMD or unsupported CPU)\n");
+        printf("\n");
     }
 
-    /* Raw mailbox register check */
-    printf("\n--- Mailbox Register Check ---\n");
-    {
-        unsigned int raw_val;
-        /* MP1 registers for Renoir */
-        if (hwsense_read_smn_diag(ctx, 0x3B10528, &raw_val))
-            printf("  MP1 MSG  (0x3B10528): 0x%08X\n", raw_val);
-        if (hwsense_read_smn_diag(ctx, 0x3B10564, &raw_val))
-            printf("  MP1 RSP  (0x3B10564): 0x%08X\n", raw_val);
-        if (hwsense_read_smn_diag(ctx, 0x3B10998, &raw_val))
-            printf("  MP1 ARG0 (0x3B10998): 0x%08X\n", raw_val);
-        /* RSMU registers for Renoir */
-        if (hwsense_read_smn_diag(ctx, 0x3B10A20, &raw_val))
-            printf("  RSMU MSG (0x3B10A20): 0x%08X\n", raw_val);
-        if (hwsense_read_smn_diag(ctx, 0x3B10A80, &raw_val))
-            printf("  RSMU RSP (0x3B10A80): 0x%08X\n", raw_val);
-        if (hwsense_read_smn_diag(ctx, 0x3B10A88, &raw_val))
-            printf("  RSMU ARG0(0x3B10A88): 0x%08X\n", raw_val);
-        /* Try Matisse registers too */
-        if (hwsense_read_smn_diag(ctx, 0x3B10530, &raw_val))
-            printf("  MAT MSG  (0x3B10530): 0x%08X\n", raw_val);
-        if (hwsense_read_smn_diag(ctx, 0x3B1057C, &raw_val))
-            printf("  MAT RSP  (0x3B1057C): 0x%08X\n", raw_val);
-    }
+    printf("=== End Report ===\n");
 
     hwsense_shutdown(ctx);
-    return (pkg.ok) ? 0 : 1;
+    return 0;
 }
