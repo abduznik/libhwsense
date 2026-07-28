@@ -1,0 +1,24 @@
+cmake_minimum_required(VERSION 3.15)
+project(libhwsense C)
+
+# Windows only
+if(NOT WIN32)
+    message(FATAL_ERROR "libhwsense requires Windows (WinRing0 kernel driver)")
+endif()
+
+# Static library: libhwsense
+add_library(hwsense STATIC
+    src/core/driver.c
+    src/cpu/amd_zen.c
+    src/cpu/intel.c
+)
+
+target_include_directories(hwsense PUBLIC include)
+target_include_directories(hwsense PRIVATE src)
+
+# Link Win32 APIs
+target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32)
+
+# Example: read_cpu_temp
+add_executable(read_cpu_temp examples/read_cpu_temp.c)
+target_link_libraries(read_cpu_temp PRIVATE hwsense)
