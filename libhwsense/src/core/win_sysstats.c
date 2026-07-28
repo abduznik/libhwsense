@@ -6,6 +6,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <winioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -127,6 +128,56 @@ int win_get_disk_stats(win_disk_stats_t *disks, int max_disks)
             snprintf(disks[count].name, sizeof(disks[count].name), "%c:", drives[i]);
             count++;
         }
+    }
+
+    return count;
+}
+
+/* ── Disk I/O Stats ────────────────────────────────────────────────── */
+
+#define MAX_WIN_DISK_IO 8
+
+typedef struct {
+    char name[64];
+    long long read_bytes;
+    long long write_bytes;
+} win_disk_io_t;
+
+int win_get_disk_io(win_disk_io_t *disks, int max_disks)
+{
+    int count = 0;
+    int i;
+
+    for (i = 0; i < max_disks && count < max_disks; i++) {
+        char device_path[64];
+        HANDLE hDev;
+        DWORD bytes_returned;
+        DISK_PERFORMANCE perf;
+
+        snprintf(device_path, sizeof(device_path), "\\\\.\\PhysicalDrive%d", i);
+
+        hDev = CreateFileA(
+            device_path,
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL
+        );
+
+        if (hDev == INVALID_HANDLE_VALUE)
+            continue;
+
+        if (DeviceIoControl(hDev, IOCTL_DISK_PERFORMANCE, NULL, 0,
+                           &perf, sizeof(perf), &bytes_returned, NULL)) {
+            snprintf(disks[count].name, sizeof(disks[count].name), "PhysicalDrive%d", i);
+            disks[count].read_bytes = perf.BytesRead.QuadPart;
+            disks[count].write_bytes = perf.BytesWritten.QuadPart;
+            count++;
+        }
+
+        CloseHandle(hDev);
     }
 
     return count;

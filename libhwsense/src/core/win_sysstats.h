@@ -6,6 +6,7 @@
 #define WIN_SYSSTATS_H
 
 #define MAX_WIN_DISKS 26
+#define MAX_WIN_DISK_IO 8
 
 typedef struct {
     double total_gb;
@@ -29,6 +30,12 @@ typedef struct {
 } win_disk_stats_t;
 
 typedef struct {
+    char name[64];
+    long long read_bytes;
+    long long write_bytes;
+} win_disk_io_t;
+
+typedef struct {
     int days;
     int hours;
     int minutes;
@@ -38,6 +45,7 @@ typedef struct {
 int win_get_mem_stats(win_mem_stats_t *mem);
 int win_get_cpu_load(win_cpu_load_t *load);
 int win_get_disk_stats(win_disk_stats_t *disks, int max_disks);
+int win_get_disk_io(win_disk_io_t *disks, int max_disks);
 win_uptime_t win_get_uptime(void);
 
 #endif /* WIN_SYSSTATS_H */

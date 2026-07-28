@@ -147,6 +147,20 @@ int main(void)
         }
     }
 
+    /* Disk I/O */
+    printf("\n--- Disk I/O ---\n");
+    {
+        win_disk_io_t diskio[MAX_WIN_DISK_IO];
+        int io_count = win_get_disk_io(diskio, MAX_WIN_DISK_IO);
+        int i;
+        for (i = 0; i < io_count; i++) {
+            printf("  %-16s Read: %8.2f GB  Write: %8.2f GB\n",
+                   diskio[i].name,
+                   diskio[i].read_bytes / 1e9,
+                   diskio[i].write_bytes / 1e9);
+        }
+    }
+
     /* Super I/O */
     hwsense_superio_result_t sio = hwsense_superio_temps(ctx);
     if (sio.ok && sio.count > 0) {

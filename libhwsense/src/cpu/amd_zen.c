@@ -16,6 +16,11 @@
  */
 #define AMD_F17H_CUR_FREQ_SMN  0x000598F4
 
+/* AMD MSR addresses for CPU frequency */
+#define MSR_HW_PSTATE_STATUS   0xC0010293  /* Current P-state: Fid[7:0], DfsId[13:8] */
+#define MSR_MPERF              0xC00000E7  /* Max frequency reference counter */
+#define MSR_APERF              0xC00000E8  /* Actual frequency counter */
+
 /*
  * Detect CPU vendor from the registry.
  * Returns 'I' for Intel, 'A' for AMD, '?' for unknown.
@@ -196,18 +201,52 @@ int hwsense_amd_read_smn(HANDLE driver_handle, DWORD smn_addr, DWORD *out_value)
 }
 
 /*
- * Read AMD CPU frequency via SMN register.
+ * Read AMD CPU frequency via MSR 0xC0010293 (Hardware P-state Status).
+ *
+ * MSR layout:
+ *   [7:0]   = CpuFid (core frequency ID)
+ *   [13:8]  = CpuDfsId (core divisor ID)
+ *   [21:14] = CpuVid (voltage ID)
+ *
+ * Formula: CoreCOF = (CpuFid / CpuDfsId) * 200 MHz
+ *
  * Returns frequency in MHz, or -1 on failure.
  */
 int hwsense_amd_cpu_freq(HANDLE driver_handle)
 {
-    DWORD raw = 0;
+    DWORD64 msr_val;
 
-    if (!smn_read(driver_handle, AMD_F17H_CUR_FREQ_SMN, &raw))
+    /* Pin to core 0 and read MSR */
+    HANDLE thread = GetCurrentThread();
+    DWORD_PTR old_mask = SetThreadAffinityMask(thread, 1);
+    if (!old_mask)
         return -1;
 
-    /* Bits [15:0] = current frequency in MHz */
-    int freq = (int)(raw & 0xFFFF);
+    DWORD in_val = MSR_HW_PSTATE_STATUS;
+    DWORD64 out_val = 0;
+    DWORD bytes_ret = 0;
+
+    BOOL ok = DeviceIoControl(
+        driver_handle, IOCTL_OLS_READ_MSR,
+        &in_val, sizeof(in_val),
+        &out_val, sizeof(out_val),
+        &bytes_ret, NULL
+    );
+
+    SetThreadAffinityMask(thread, old_mask);
+
+    if (!ok)
+        return -1;
+
+    DWORD eax = (DWORD)(out_val & 0xFFFFFFFF);
+    DWORD cpuFid = eax & 0xFF;
+    DWORD cpuDfsId = (eax >> 8) & 0x3F;
+
+    if (cpuDfsId == 0)
+        return -1;
+
+    /* CoreCOF = (CpuFid / CpuDfsId) * 200 */
+    int freq = (int)((cpuFid * 200.0) / cpuDfsId);
 
     /* Sanity check */
     if (freq < 400 || freq > 8000)
