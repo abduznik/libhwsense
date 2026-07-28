@@ -101,6 +101,41 @@ int win_get_cpu_load(win_cpu_load_t *load)
     return 1;
 }
 
+/*
+ * Get CPU load with a 1-second sampling interval.
+ * This gives accurate readings on first call.
+ */
+int win_get_cpu_load_sampled(win_cpu_load_t *load)
+{
+    cpu_times_t start, end;
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    load->num_cpus = si.dwNumberOfProcessors;
+
+    /* First sample */
+    if (!get_cpu_times(&start))
+        return 0;
+
+    /* Wait 1 second */
+    Sleep(1000);
+
+    /* Second sample */
+    if (!get_cpu_times(&end))
+        return 0;
+
+    long long idle_delta = filetime_to_100ns(&end.idle_time) - filetime_to_100ns(&start.idle_time);
+    long long kernel_delta = filetime_to_100ns(&end.kernel_time) - filetime_to_100ns(&start.kernel_time);
+    long long user_delta = filetime_to_100ns(&end.user_time) - filetime_to_100ns(&start.user_time);
+
+    long long total = kernel_delta + user_delta;
+    if (total > 0)
+        load->percent = 100.0 * (1.0 - (double)idle_delta / (double)total);
+    else
+        load->percent = 0.0;
+
+    return 1;
+}
+
 /* ── Disk Stats ────────────────────────────────────────────────────── */
 
 typedef struct {

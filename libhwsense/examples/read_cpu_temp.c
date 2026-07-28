@@ -58,7 +58,9 @@ int main(void)
         printf("Uptime: %d days, %d hours, %d minutes\n",
                uptime.days, uptime.hours, uptime.minutes);
 
-        if (win_get_cpu_load(&cpu_load))
+        /* Use sampled load for accurate reading */
+        printf("Measuring CPU load (1 second)...\n");
+        if (win_get_cpu_load_sampled(&cpu_load))
             printf("CPU Load: %.1f%% (%d cores)\n", cpu_load.percent, cpu_load.num_cpus);
 
         if (win_get_mem_stats(&mem))
