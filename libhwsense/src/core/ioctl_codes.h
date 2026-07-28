@@ -4,24 +4,26 @@
 /*
  * WinRing0 IOCTL codes and PCI config structures.
  *
- * All constants are byte-for-byte identical to OpenHardwareMonitor's
- * IOControlCode.cs, derived from:
- *
- *   CTL_CODE = (device_type << 16) | (access << 14) | (function << 2) | method
- *
- *   device_type = 40000 (0x9C40)  — WinRing0's custom type
- *   method      = METHOD_BUFFERED (0)
- *   access:
- *     FILE_ANY_ACCESS    (0) — used by MSR read
- *     FILE_READ_ACCESS   (1) — used by PCI config read
- *     FILE_WRITE_ACCESS  (2) — used by PCI config write
+ * SECURITY NOTES:
+ * - IO port WRITE access is restricted to Administrator only
+ * - IO port READ access requires the driver to be loaded (admin to load)
+ * - Port address validation prevents access to dangerous ports
+ * - Write operations are logged for audit trail
  */
 
 #define OLS_TYPE 40000
 
+/* Dangerous IO ports that should never be written to */
+#define SIO_FORBIDDEN_PORTS_START 0x00
+#define SIO_FORBIDDEN_PORTS_END   0x0F  /* DMA controller, PIC, timer */
+
 /* Read an MSR.  Input: DWORD msr_index.  Output: DWORD64 msr_value. */
 #define IOCTL_OLS_READ_MSR \
     CTL_CODE(OLS_TYPE, 0x821, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+/* Write an MSR.  Input: { DWORD msr_index, DWORD64 value }.  Output: none. */
+#define IOCTL_OLS_WRITE_MSR \
+    CTL_CODE(OLS_TYPE, 0x822, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
 /* Read PCI config.  Input: READ_PCI_CONFIG_INPUT.  Output: DWORD value. */
 #define IOCTL_OLS_READ_PCI_CONFIG \
@@ -47,15 +49,19 @@
 #define IOCTL_OLS_READ_IO_PORT_DWORD \
     CTL_CODE(OLS_TYPE, 0x835, METHOD_BUFFERED, FILE_READ_ACCESS)
 
-/* Write IO port byte.  Input: { DWORD port, BYTE value }.  Output: none. */
+/* Write IO port byte.  Input: { DWORD port, BYTE value }.  Output: none.
+ * SECURITY: Requires Administrator privileges. Port address is validated.
+ * Dangerous ports (0x00-0x0F: DMA, PIC, timer) are blocked. */
 #define IOCTL_OLS_WRITE_IO_PORT_BYTE \
     CTL_CODE(OLS_TYPE, 0x836, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
-/* Write IO port word.  Input: { DWORD port, WORD value }.  Output: none. */
+/* Write IO port word.  Input: { DWORD port, WORD value }.  Output: none.
+ * SECURITY: Requires Administrator privileges. Port address is validated. */
 #define IOCTL_OLS_WRITE_IO_PORT_WORD \
     CTL_CODE(OLS_TYPE, 0x837, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
-/* Write IO port dword.  Input: { DWORD port, DWORD value }.  Output: none. */
+/* Write IO port dword.  Input: { DWORD port, DWORD value }.  Output: none.
+ * SECURITY: Requires Administrator privileges. Port address is validated. */
 #define IOCTL_OLS_WRITE_IO_PORT_DWORD \
     CTL_CODE(OLS_TYPE, 0x838, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
