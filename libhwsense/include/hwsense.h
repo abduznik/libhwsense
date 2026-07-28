@@ -123,6 +123,29 @@ double hwsense_cpu_core_voltage_value(hwsense_ctx_t *ctx);
 double hwsense_cpu_package_power_watts(hwsense_ctx_t *ctx);
 
 /*
+ * Maximum number of Super I/O temperature sensors.
+ */
+#define HWSENSE_MAX_SUPERIO_TEMPS 4
+
+/*
+ * Super I/O temperature reading result.
+ */
+typedef struct {
+    int ok;
+    int temperatures[HWSENSE_MAX_SUPERIO_TEMPS];
+    int count;
+    unsigned short chip_id;
+    char chip_name[64];
+    char error[256];
+} hwsense_superio_result_t;
+
+/*
+ * Read Super I/O motherboard temperatures.
+ * Returns temperature readings from Winbond/Nuvoton chips.
+ */
+hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx);
+
+/*
  * NVMe/SSD temperature reading via SMART.
  * Returns temperature in Celsius, or -1 on failure.
  */

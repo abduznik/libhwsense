@@ -35,6 +35,14 @@
 #define IOCTL_OLS_READ_MEMORY \
     CTL_CODE(OLS_TYPE, 0x841, METHOD_BUFFERED, FILE_READ_ACCESS)
 
+/* Read IO port byte.  Input: DWORD port.  Output: BYTE value. */
+#define IOCTL_OLS_READ_IO_PORT_BYTE \
+    CTL_CODE(OLS_TYPE, 0x831, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+/* Write IO port byte.  Input: { DWORD port, BYTE value }.  Output: none. */
+#define IOCTL_OLS_WRITE_IO_PORT_BYTE \
+    CTL_CODE(OLS_TYPE, 0x832, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 /*
  * Physical memory read input struct — must match WinRing0 driver layout.
  * Address is LARGE_INTEGER (8 bytes) — NOT DWORD (4 bytes).

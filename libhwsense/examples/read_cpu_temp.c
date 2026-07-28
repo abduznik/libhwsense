@@ -101,6 +101,18 @@ int main(void)
     else
         printf("Package Power (raw): N/A\n");
 
+    /* Super I/O Motherboard Temps */
+    hwsense_superio_result_t sio = hwsense_superio_temps(ctx);
+    if (sio.ok && sio.count > 0) {
+        printf("Super I/O (%s):     ", sio.chip_name);
+        int i;
+        for (i = 0; i < sio.count; i++)
+            printf("%d C  ", sio.temperatures[i]);
+        printf("\n");
+    } else {
+        printf("Super I/O:          N/A\n");
+    }
+
     /* IOCTL scan diagnostic - use existing driver handle */
     printf("\n--- IOCTL Memory Read Scan ---\n");
     {
