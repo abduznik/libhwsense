@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <ctype.h>
+#include <sys/statvfs.h>
 
 #define MAX_PATH 512
 #define MAX_DRIVES 8
@@ -518,6 +519,112 @@ static int read_loadavg(double *load1, double *load5, double *load15, int *procs
     return (result == 4);
 }
 
+/* ── GPU Temperature (Intel i915 via hwmon) ────────────────────────── */
+
+static int read_gpu_temp(void)
+{
+    char path[256];
+    FILE *f;
+    int temp;
+
+    /* Try /sys/class/hwmon/hwmonN/temp1_input looking for i915 */
+    DIR *dir = opendir("/sys/class/hwmon");
+    if (!dir)
+        return -1;
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        if (strncmp(ent->d_name, "hwmon", 5) != 0)
+            continue;
+
+        /* Check if this is an Intel GPU */
+        snprintf(path, sizeof(path), "/sys/class/hwmon/%s/name", ent->d_name);
+        f = fopen(path, "r");
+        if (f) {
+            char name[64] = {0};
+            fgets(name, sizeof(name), f);
+            fclose(f);
+
+            /* Remove newline */
+            char *nl = strchr(name, '\n');
+            if (nl) *nl = '\0';
+
+            if (strstr(name, "i915") || strstr(name, "intel")) {
+                /* Read temperature */
+                snprintf(path, sizeof(path), "/sys/class/hwmon/%s/temp1_input", ent->d_name);
+                f = fopen(path, "r");
+                if (f) {
+                    if (fscanf(f, "%d", &temp) == 1) {
+                        closedir(dir);
+                        return temp / 1000;  /* millidegrees to degrees */
+                    }
+                    fclose(f);
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+    return -1;
+}
+
+/* ── Disk Usage ────────────────────────────────────────────────────── */
+
+typedef struct {
+    char mount[128];
+    char device[128];
+    double total_gb;
+    double used_gb;
+    double free_gb;
+    int percent_used;
+} disk_usage_t;
+
+static int read_disk_usage(disk_usage_t *disks, int max_disks)
+{
+    FILE *f;
+    char line[1024];
+    int count = 0;
+
+    f = fopen("/proc/mounts", "r");
+    if (!f)
+        return 0;
+
+    while (fgets(line, sizeof(line), f) && count < max_disks) {
+        char device[128], mount[128], fs[32];
+        if (sscanf(line, "%127s %127s %31s", device, mount, fs) != 3)
+            continue;
+
+        /* Only show real filesystems */
+        if (strncmp(device, "/dev/", 5) != 0)
+            continue;
+
+        /* Skip snap loops */
+        if (strncmp(device, "/dev/loop", 9) == 0)
+            continue;
+
+        struct statvfs buf;
+        if (statvfs(mount, &buf) != 0)
+            continue;
+
+        unsigned long total = buf.f_blocks * buf.f_frsize;
+        unsigned long free_space = buf.f_bavail * buf.f_frsize;
+        unsigned long used = total - free_space;
+
+        if (total > 0) {
+            strncpy(disks[count].device, device, sizeof(disks[count].device) - 1);
+            strncpy(disks[count].mount, mount, sizeof(disks[count].mount) - 1);
+            disks[count].total_gb = total / (1024.0 * 1024 * 1024);
+            disks[count].used_gb = used / (1024.0 * 1024 * 1024);
+            disks[count].free_gb = free_space / (1024.0 * 1024 * 1024);
+            disks[count].percent_used = (int)(100.0 * used / total);
+            count++;
+        }
+    }
+
+    fclose(f);
+    return count;
+}
+
 /* ── Main ──────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -561,6 +668,17 @@ int main(void)
         if (mem.swap_total_kb > 0)
             printf("  Swap: %.1f GB used", swap_used_gb);
         printf("\n");
+    }
+    printf("\n");
+
+    /* ── GPU Temperature ── */
+    printf("--- GPU ---\n");
+    {
+        int gpu_temp = read_gpu_temp();
+        if (gpu_temp > 0)
+            printf("GPU Temp (Intel):    %d C\n", gpu_temp);
+        else
+            printf("GPU Temp:            N/A\n");
     }
     printf("\n");
 
@@ -628,6 +746,21 @@ int main(void)
             printf("  %-10s %d RPM\n", fans[i].name, fans[i].rpm);
     } else {
         printf("  No fan data available\n");
+    }
+    printf("\n");
+
+    /* ── Disk Usage ── */
+    printf("--- Disk Usage ---\n");
+    {
+        disk_usage_t disk_usage[16];
+        int usage_count = read_disk_usage(disk_usage, 16);
+        for (i = 0; i < usage_count; i++) {
+            printf("  %-20s %6.1f / %6.1f GB (%d%% used)\n",
+                   disk_usage[i].mount,
+                   disk_usage[i].used_gb,
+                   disk_usage[i].total_gb,
+                   disk_usage[i].percent_used);
+        }
     }
     printf("\n");
 
