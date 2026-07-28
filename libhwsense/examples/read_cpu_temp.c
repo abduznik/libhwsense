@@ -80,6 +80,27 @@ int main(void)
     else
         printf("NVMe/SSD Temp:      N/A\n");
 
+    /* CPU Core Clock */
+    int clock = hwsense_cpu_core_clock(ctx);
+    if (clock > 0)
+        printf("CPU Core Clock:     %d MHz\n", clock);
+    else
+        printf("CPU Core Clock:     N/A\n");
+
+    /* CPU Core Voltage (new) */
+    double vcore_val = hwsense_cpu_core_voltage_value(ctx);
+    if (vcore_val > 0)
+        printf("CPU Core V (raw):  %.4f V\n", vcore_val);
+    else
+        printf("CPU Core V (raw):  N/A\n");
+
+    /* Package Power (new) */
+    double power_w = hwsense_cpu_package_power_watts(ctx);
+    if (power_w > 0)
+        printf("Package Power (raw): %.2f W\n", power_w);
+    else
+        printf("Package Power (raw): N/A\n");
+
     /* IOCTL scan diagnostic - use existing driver handle */
     printf("\n--- IOCTL Memory Read Scan ---\n");
     {

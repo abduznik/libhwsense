@@ -103,10 +103,24 @@ int hwsense_smu_diag(hwsense_ctx_t *ctx,
                      unsigned long long *out_dram_base);
 
 /*
- * Diagnostic: attempt PM table transfer and read power from DRAM.
- * Returns power in watts, or negative on failure.
+ * CPU core clock speed (MHz).
+ * Intel: MSR 0x198, AMD: returns -1 (not yet implemented).
  */
-float hwsense_amd_pmtable_power(hwsense_ctx_t *ctx);
+int hwsense_cpu_core_clock(hwsense_ctx_t *ctx);
+
+/*
+ * CPU core voltage.
+ * Intel: MSR 0x198 VID/8192.0, AMD: SVI2 Plane0.
+ * Returns volts, or -1.0 on failure.
+ */
+double hwsense_cpu_core_voltage_value(hwsense_ctx_t *ctx);
+
+/*
+ * CPU package power (Watts).
+ * Intel: RAPL MSR 0x610 energy delta, AMD: SVI2 V*I estimate.
+ * Returns watts, or -1.0 on failure.
+ */
+double hwsense_cpu_package_power_watts(hwsense_ctx_t *ctx);
 
 /*
  * NVMe/SSD temperature reading via SMART.

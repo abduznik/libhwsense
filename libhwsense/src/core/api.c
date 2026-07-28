@@ -10,10 +10,9 @@
 #include <stdio.h>
 
 /*
- * Dispatch to Intel or AMD temperature reading based on CPU vendor.
- * Declared in cpu/amd_zen.c and cpu/intel.c.
+ * Dispatch to Intel or AMD implementations based on CPU vendor.
  */
-extern int   hwsense_detect_vendor(void); /* returns 'I' for Intel, 'A' for AMD */
+extern int   hwsense_detect_vendor(void);
 extern hwsense_temp_result_t hwsense_amd_package_temp(HANDLE driver_handle);
 extern hwsense_temp_result_t hwsense_intel_core_temp(HANDLE driver_handle);
 extern hwsense_voltage_result_t hwsense_amd_core_voltage(HANDLE driver_handle);
@@ -25,6 +24,9 @@ extern int hwsense_amd_smu_diag(HANDLE driver_handle,
                                DWORD *out_smu_ver, DWORD *out_pm_ver,
                                DWORD64 *out_dram_base);
 extern float hwsense_amd_pmtable_power_raw(HANDLE driver_handle);
+extern int hwsense_intel_core_clock(HANDLE driver_handle);
+extern double hwsense_intel_core_voltage(HANDLE driver_handle);
+extern double hwsense_intel_package_power(HANDLE driver_handle);
 
 hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)
 {
@@ -164,4 +166,48 @@ float hwsense_amd_pmtable_power(hwsense_ctx_t *ctx)
         return hwsense_amd_pmtable_power_raw(ctx->driver_handle);
 
     return -1.0f;
+}
+
+int hwsense_cpu_core_clock(hwsense_ctx_t *ctx)
+{
+    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE)
+        return -1;
+
+    int vendor = hwsense_detect_vendor();
+
+    if (vendor == 'I')
+        return hwsense_intel_core_clock(ctx->driver_handle);
+
+    /* AMD: clock reading not yet implemented */
+    return -1;
+}
+
+double hwsense_cpu_core_voltage_value(hwsense_ctx_t *ctx)
+{
+    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE)
+        return -1.0;
+
+    int vendor = hwsense_detect_vendor();
+
+    if (vendor == 'I')
+        return hwsense_intel_core_voltage(ctx->driver_handle);
+
+    /* AMD: use SVI2 */
+    hwsense_voltage_result_t r = hwsense_amd_core_voltage(ctx->driver_handle);
+    return r.ok ? r.volts : -1.0;
+}
+
+double hwsense_cpu_package_power_watts(hwsense_ctx_t *ctx)
+{
+    if (!ctx || !ctx->driver_handle || ctx->driver_handle == INVALID_HANDLE_VALUE)
+        return -1.0;
+
+    int vendor = hwsense_detect_vendor();
+
+    if (vendor == 'I')
+        return hwsense_intel_package_power(ctx->driver_handle);
+
+    /* AMD: use SVI2 V*I */
+    hwsense_voltage_result_t r = hwsense_amd_package_power(ctx->driver_handle);
+    return r.ok ? r.volts : -1.0;
 }
