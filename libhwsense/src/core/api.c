@@ -25,8 +25,13 @@ extern int hwsense_amd_smu_diag(HANDLE driver_handle,
                                DWORD64 *out_dram_base);
 extern float hwsense_amd_pmtable_power_raw(HANDLE driver_handle);
 extern int hwsense_intel_core_clock(HANDLE driver_handle);
+extern int hwsense_intel_core_clock_on_core(HANDLE driver_handle, int core_id);
 extern double hwsense_intel_core_voltage(HANDLE driver_handle);
 extern double hwsense_intel_package_power(HANDLE driver_handle);
+extern double hwsense_intel_pp0_power(HANDLE driver_handle);
+extern double hwsense_intel_pp1_power(HANDLE driver_handle);
+extern double hwsense_intel_dram_power(HANDLE driver_handle);
+extern int hwsense_intel_all_core_temps(HANDLE driver_handle, double *temps, int max_cores);
 extern int hwsense_amd_cpu_freq(HANDLE driver_handle);
 
 hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)

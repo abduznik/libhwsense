@@ -111,6 +111,20 @@ int main(void)
     else
         printf("Package Power:       N/A\n");
 
+    /* Intel RAPL Power Domains */
+    {
+        int vendor = hwsense_detect_vendor();
+        if (vendor == 'I') {
+            HANDLE dev = hwsense_get_driver_handle(ctx);
+            double pp0 = hwsense_intel_pp0_power(dev);
+            double pp1 = hwsense_intel_pp1_power(dev);
+            double dram = hwsense_intel_dram_power(dev);
+            if (pp0 > 0) printf("PP0 Cores Power:     %.2f W\n", pp0);
+            if (pp1 > 0) printf("PP1 Uncore Power:    %.2f W\n", pp1);
+            if (dram > 0) printf("DRAM Power:          %.2f W\n", dram);
+        }
+    }
+
     int clock = hwsense_cpu_core_clock(ctx);
     if (clock > 0)
         printf("Core Clock:          %d MHz\n", clock);

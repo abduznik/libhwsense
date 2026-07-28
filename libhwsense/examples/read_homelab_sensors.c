@@ -788,7 +788,7 @@ int main(void)
 
     /* ── RAPL Power Delta ── */
     if (rapl_prev.available) {
-        printf("--- RAPL Power Delta ---\n");
+        printf("--- RAPL Power Domains ---\n");
         printf("  Reading power (1 second)...\n");
         sleep(1);
         rapl_curr = read_rapl();
@@ -797,8 +797,49 @@ int main(void)
             printf("  Package Power: %.2f W\n", rapl_power);
         else
             printf("  Could not compute power delta\n");
-        printf("\n");
+
+        /* Try to read other RAPL domains */
+        FILE *f;
+        char path[256];
+        double domain_power;
+
+        /* PP0 (CPU cores) */
+        snprintf(path, sizeof(path), "/sys/class/powercap/intel-rapl:0/energy_uj");
+        f = fopen(path, "r");
+        if (f) {
+            unsigned long long energy;
+            if (fscanf(f, "%llu", &energy) == 1) {
+                /* Store for later delta calculation */
+            }
+            fclose(f);
+        }
+
+        /* PP1 (Uncore/GPU) */
+        snprintf(path, sizeof(path), "/sys/class/powercap/intel-rapl:0:0/energy_uj");
+        f = fopen(path, "r");
+        if (f) {
+            unsigned long long energy;
+            if (fscanf(f, "%llu", &energy) == 1) {
+                printf("  PP1 (GPU/Uncore): Available\n");
+            }
+            fclose(f);
+        }
+
+        /* DRAM */
+        snprintf(path, sizeof(path), "/sys/class/powercap/intel-rapl:1/energy_uj");
+        f = fopen(path, "r");
+        if (f) {
+            unsigned long long energy;
+            if (fscanf(f, "%llu", &energy) == 1) {
+                printf("  DRAM: Available\n");
+            }
+            fclose(f);
+        }
+    } else {
+        printf("--- RAPL Power ---\n");
+        printf("  RAPL not available (need sudo)\n");
     }
+    printf("\n");
 
     printf("=== End Report ===\n");
     return 0;
