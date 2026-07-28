@@ -146,6 +146,23 @@ typedef struct {
 hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx);
 
 /*
+ * GPU temperature reading result.
+ */
+typedef struct {
+    int ok;
+    int temperature;
+    char name[128];
+    char error[256];
+} hwsense_gpu_result_t;
+
+/*
+ * Read GPU temperature.
+ * Tries NVIDIA NVML first, then AMD ADL.
+ * gpu_index: which GPU to read (0 = first).
+ */
+hwsense_gpu_result_t hwsense_gpu_temperature(int gpu_index);
+
+/*
  * NVMe/SSD temperature reading via SMART.
  * Returns temperature in Celsius, or -1 on failure.
  */

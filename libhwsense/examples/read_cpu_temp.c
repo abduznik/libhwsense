@@ -113,6 +113,13 @@ int main(void)
         printf("Super I/O:          N/A\n");
     }
 
+    /* GPU Temperature */
+    hwsense_gpu_result_t gpu = hwsense_gpu_temperature(0);
+    if (gpu.ok)
+        printf("GPU Temp (%s):      %d C\n", gpu.name, gpu.temperature);
+    else
+        printf("GPU Temp:           N/A\n");
+
     /* IOCTL scan diagnostic - use existing driver handle */
     printf("\n--- IOCTL Memory Read Scan ---\n");
     {

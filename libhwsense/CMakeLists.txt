@@ -16,6 +16,7 @@ add_library(hwsense STATIC
     src/cpu/intel.c
     src/storage/storage.c
     src/motherboard/superio.c
+    src/gpu/gpu.c
 )
 
 target_include_directories(hwsense PUBLIC include)
