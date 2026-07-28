@@ -12,6 +12,7 @@ add_library(hwsense STATIC
     src/core/api.c
     src/core/win_sysstats.c
     src/core/wmi.c
+    src/core/hwsense_unified.c
     src/cpu/amd_zen.c
     src/cpu/amd_svi2.c
     src/cpu/amd_smu.c
