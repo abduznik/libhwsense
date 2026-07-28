@@ -114,11 +114,12 @@ static BOOL sio_read_port(HANDLE dev, DWORD port, BYTE *out_value)
 
 static BOOL sio_write_port(HANDLE dev, DWORD port, BYTE value)
 {
-    BYTE inp[5];
+    /* WinRing0 expects: DWORD port, BYTE value (padded to DWORD) */
+    DWORD inp[2];
     DWORD bytes_ret = 0;
 
-    *(DWORD*)&inp[0] = port;
-    inp[4] = value;
+    inp[0] = port;
+    inp[1] = (DWORD)value;
 
     return DeviceIoControl(
         dev, IOCTL_OLS_WRITE_IO_PORT_BYTE,

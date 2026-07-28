@@ -37,11 +37,27 @@
 
 /* Read IO port byte.  Input: DWORD port.  Output: BYTE value. */
 #define IOCTL_OLS_READ_IO_PORT_BYTE \
-    CTL_CODE(OLS_TYPE, 0x831, METHOD_BUFFERED, FILE_ANY_ACCESS)
+    CTL_CODE(OLS_TYPE, 0x833, METHOD_BUFFERED, FILE_READ_ACCESS)
+
+/* Read IO port word.  Input: DWORD port.  Output: WORD value. */
+#define IOCTL_OLS_READ_IO_PORT_WORD \
+    CTL_CODE(OLS_TYPE, 0x834, METHOD_BUFFERED, FILE_READ_ACCESS)
+
+/* Read IO port dword.  Input: DWORD port.  Output: DWORD value. */
+#define IOCTL_OLS_READ_IO_PORT_DWORD \
+    CTL_CODE(OLS_TYPE, 0x835, METHOD_BUFFERED, FILE_READ_ACCESS)
 
 /* Write IO port byte.  Input: { DWORD port, BYTE value }.  Output: none. */
 #define IOCTL_OLS_WRITE_IO_PORT_BYTE \
-    CTL_CODE(OLS_TYPE, 0x832, METHOD_BUFFERED, FILE_ANY_ACCESS)
+    CTL_CODE(OLS_TYPE, 0x836, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+
+/* Write IO port word.  Input: { DWORD port, WORD value }.  Output: none. */
+#define IOCTL_OLS_WRITE_IO_PORT_WORD \
+    CTL_CODE(OLS_TYPE, 0x837, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+
+/* Write IO port dword.  Input: { DWORD port, DWORD value }.  Output: none. */
+#define IOCTL_OLS_WRITE_IO_PORT_DWORD \
+    CTL_CODE(OLS_TYPE, 0x838, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 
 /*
  * Physical memory read input struct — must match WinRing0 driver layout.
