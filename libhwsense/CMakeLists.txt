@@ -17,6 +17,7 @@ add_library(hwsense STATIC
     src/cpu/intel.c
     src/storage/storage.c
     src/motherboard/superio.c
+    src/motherboard/ec.c
     src/gpu/gpu.c
 )
 

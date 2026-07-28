@@ -10,6 +10,7 @@
 #include "hwsense.h"
 #include "../src/core/ioctl_codes.h"
 #include "../src/core/win_sysstats.h"
+#include "../src/motherboard/ec.h"
 
 int main(void)
 {
@@ -194,6 +195,33 @@ int main(void)
         for (i = 0; i < sio_volts.voltage_count && i < 4; i++)
             printf("V%d: %.3f V  ", i + 1, sio_volts.voltages[i]);
         printf("\n");
+    }
+
+    /* ASUS Embedded Controller (EC) sensors */
+    printf("\n--- ASUS EC Sensors ---\n");
+    {
+        HANDLE dev = hwsense_get_driver_handle(ctx);
+        ec_result_t ec = ec_read_all_sensors(dev);
+        if (ec.ok) {
+            if (ec.cpu_fan_rpm > 0)
+                printf("CPU Fan:           %d RPM\n", ec.cpu_fan_rpm);
+            if (ec.vrm_fan_rpm > 0)
+                printf("VRM Fan:           %d RPM\n", ec.vrm_fan_rpm);
+            if (ec.chipset_temp > 0)
+                printf("Chipset Temp:      %d C\n", ec.chipset_temp);
+            if (ec.cpu_temp > 0)
+                printf("CPU Temp (EC):     %d C\n", ec.cpu_temp);
+            if (ec.mb_temp > 0)
+                printf("Motherboard Temp:  %d C\n", ec.mb_temp);
+            if (ec.vrm_temp > 0)
+                printf("VRM Temp:          %d C\n", ec.vrm_temp);
+            if (ec.cpu_voltage_mv > 0)
+                printf("CPU Voltage (EC):  %.3f V\n", ec.cpu_voltage_mv / 1000.0);
+            if (ec.cpu_current_amps > 0)
+                printf("CPU Current (EC):  %d A\n", ec.cpu_current_amps);
+        } else {
+            printf("EC:                %s\n", ec.error);
+        }
     }
     printf("\n");
 

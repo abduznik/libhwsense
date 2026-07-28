@@ -214,3 +214,10 @@ double hwsense_cpu_package_power_watts(hwsense_ctx_t *ctx)
     hwsense_voltage_result_t r = hwsense_amd_package_power(ctx->driver_handle);
     return r.ok ? r.volts : -1.0;
 }
+
+HANDLE hwsense_get_driver_handle(hwsense_ctx_t *ctx)
+{
+    if (!ctx)
+        return INVALID_HANDLE_VALUE;
+    return ctx->driver_handle;
+}

@@ -161,6 +161,11 @@ hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx);
 hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx);
 
 /*
+ * Get the driver handle from context (for EC access).
+ */
+HANDLE hwsense_get_driver_handle(hwsense_ctx_t *ctx);
+
+/*
  * GPU temperature reading result.
  */
 typedef struct {
