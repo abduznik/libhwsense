@@ -27,6 +27,7 @@ extern float hwsense_amd_pmtable_power_raw(HANDLE driver_handle);
 extern int hwsense_intel_core_clock(HANDLE driver_handle);
 extern double hwsense_intel_core_voltage(HANDLE driver_handle);
 extern double hwsense_intel_package_power(HANDLE driver_handle);
+extern int hwsense_amd_cpu_freq(HANDLE driver_handle);
 
 hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)
 {
@@ -178,7 +179,9 @@ int hwsense_cpu_core_clock(hwsense_ctx_t *ctx)
     if (vendor == 'I')
         return hwsense_intel_core_clock(ctx->driver_handle);
 
-    /* AMD: clock reading not yet implemented */
+    if (vendor == 'A')
+        return hwsense_amd_cpu_freq(ctx->driver_handle);
+
     return -1;
 }
 

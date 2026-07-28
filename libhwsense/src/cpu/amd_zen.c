@@ -1,13 +1,20 @@
 /*
  * amd_zen.c — AMD Zen (Family 17h+) core functions.
  *
- * Vendor detection, PCI config read/write, SMN access, temperature reading.
+ * Vendor detection, PCI config read/write, SMN access, temperature reading,
+ * CPU frequency via SMN register 0x000598F4.
  */
 
 #include "../core/hwsense_internal.h"
 #include "../core/ioctl_codes.h"
 #include <stdio.h>
 #include <intrin.h>
+
+/*
+ * AMD SMN address for core frequency (F17h M00h: 0x000598F4)
+ * Bits [15:0] = current frequency in MHz
+ */
+#define AMD_F17H_CUR_FREQ_SMN  0x000598F4
 
 /*
  * Detect CPU vendor from the registry.
@@ -186,4 +193,25 @@ hwsense_ccd_temps_t hwsense_amd_ccd_temps(hwsense_ctx_t *ctx)
 int hwsense_amd_read_smn(HANDLE driver_handle, DWORD smn_addr, DWORD *out_value)
 {
     return smn_read(driver_handle, smn_addr, out_value) ? 1 : 0;
+}
+
+/*
+ * Read AMD CPU frequency via SMN register.
+ * Returns frequency in MHz, or -1 on failure.
+ */
+int hwsense_amd_cpu_freq(HANDLE driver_handle)
+{
+    DWORD raw = 0;
+
+    if (!smn_read(driver_handle, AMD_F17H_CUR_FREQ_SMN, &raw))
+        return -1;
+
+    /* Bits [15:0] = current frequency in MHz */
+    int freq = (int)(raw & 0xFFFF);
+
+    /* Sanity check */
+    if (freq < 400 || freq > 8000)
+        return -1;
+
+    return freq;
 }
