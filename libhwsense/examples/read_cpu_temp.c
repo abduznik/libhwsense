@@ -11,6 +11,7 @@
 #include "../src/core/ioctl_codes.h"
 #include "../src/core/win_sysstats.h"
 #include "../src/motherboard/ec.h"
+#include "../src/core/wmi.h"
 
 int main(void)
 {
@@ -245,6 +246,58 @@ int main(void)
             else
                 printf("  Port 0x%03X: FAIL\n", ports_to_scan[i]);
         }
+    }
+    printf("\n");
+
+    /* WMI Sensor Data */
+    printf("--- WMI Sensors ---\n");
+    if (wmi_init()) {
+        /* Thermal zones */
+        double temps[32];
+        char names[32][64];
+        int zone_count = wmi_read_thermal_zones(temps, 32, names, 32);
+        if (zone_count > 0) {
+            printf("Thermal Zones: %d found\n", zone_count);
+            for (int i = 0; i < zone_count; i++)
+                printf("  %s: %.1f C\n", names[i], temps[i]);
+        } else {
+            printf("Thermal Zones: None found\n");
+        }
+
+        /* CPU info */
+        wmi_cpu_info_t cpu;
+        if (wmi_read_cpu_info(&cpu)) {
+            printf("CPU: %s\n", cpu.name);
+            printf("  Max Clock: %d MHz\n", cpu.max_clock_mhz);
+            printf("  Current Clock: %d MHz\n", cpu.current_clock_mhz);
+            if (cpu.voltage_mv > 0)
+                printf("  Voltage: %.3f V\n", cpu.voltage_mv / 1000.0);
+            if (cpu.load_percent > 0)
+                printf("  Load: %d%%\n", cpu.load_percent);
+        }
+
+        /* Fans */
+        wmi_fan_info_t fans[16];
+        int fan_count = wmi_read_fans(fans, 16);
+        if (fan_count > 0) {
+            printf("Fans: %d found\n", fan_count);
+            for (int i = 0; i < fan_count; i++)
+                printf("  %s: %s\n", fans[i].name,
+                       fans[i].active_cooling ? "Active" : "Passive");
+        }
+
+        /* Voltages */
+        wmi_voltage_info_t voltages[16];
+        int voltage_count = wmi_read_voltages(voltages, 16);
+        if (voltage_count > 0) {
+            printf("Voltages: %d found\n", voltage_count);
+            for (int i = 0; i < voltage_count; i++)
+                printf("  %s: %.3f V\n", voltages[i].name, voltages[i].voltage);
+        }
+
+        wmi_shutdown();
+    } else {
+        printf("WMI: Failed to initialize\n");
     }
     printf("\n");
 

@@ -11,6 +11,7 @@ add_library(hwsense STATIC
     src/core/driver.c
     src/core/api.c
     src/core/win_sysstats.c
+    src/core/wmi.c
     src/cpu/amd_zen.c
     src/cpu/amd_svi2.c
     src/cpu/amd_smu.c
@@ -24,8 +25,8 @@ add_library(hwsense STATIC
 target_include_directories(hwsense PUBLIC include)
 target_include_directories(hwsense PRIVATE src)
 
-# Link Win32 APIs
-target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32)
+# Link Win32 APIs and COM libraries
+target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32 ole32 oleaut32 wbemuuid)
 
 # Example: read_cpu_temp
 add_executable(read_cpu_temp examples/read_cpu_temp.c)
