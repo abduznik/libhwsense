@@ -1,5 +1,5 @@
 /*
- * intel_sensors_linux.c - Intel CPU sensors on Linux via /dev/cpu/*/msr + sysfs.
+ * intel_sensors_linux.c - Intel CPU sensors on Linux via /dev/cpu/N/msr + sysfs.
  *
  * Reads:
  *   MSR 0x198 (IA32_PERF_STATUS) - CPU Core Voltage (EDX[15:0] = VID)
