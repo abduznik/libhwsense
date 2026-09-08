@@ -1,3 +1,11 @@
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![GitHub stars](https://img.shields.io/github/stars/abduznik/libhwsense)](https://github.com/abduznik/libhwsense/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/abduznik/libhwsense)](https://github.com/abduznik/libhwsense/network/members)
+[![Last commit](https://img.shields.io/github/last-commit/abduznik/libhwsense)](https://github.com/abduznik/libhwsense/commits)
+[![GitHub issues](https://img.shields.io/github/issues/abduznik/libhwsense)](https://github.com/abduznik/libhwsense/issues)
+[![Sponsor](https://img.shields.io/badge/Sponsor-abduznik-ea4aaa)](https://github.com/sponsors/abduznik)
+
+---
 # libhwsense — Hardware Sensor Library
 
 A lightweight C library for reading hardware sensors on Windows. Supports Intel and AMD CPUs, NVIDIA and AMD GPUs, and system metrics.
