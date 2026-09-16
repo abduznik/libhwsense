@@ -10,4 +10,7 @@ struct hwsense_ctx {
     SC_HANDLE svc_handle;
 };
 
+/* Forward declarations — Intel CPU functions */
+extern double hwsense_intel_package_power(HANDLE driver_handle);
+
 #endif /* HWSENSE_INTERNAL_H */
