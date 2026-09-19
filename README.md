@@ -261,11 +261,38 @@ MSR access goes through `/dev/cpu/N/msr`, which needs the `msr` kernel module an
 
 ### Tests
 
-The register-decode formulas (Intel TjMax/thermal status, AMD Tctl and CCD, SVI2 VID, RAPL energy) live in `src/core/sensor_math.h` as pure functions, so they can be tested without hardware or privileges:
+The register-decode formulas (Intel TjMax/thermal status, AMD Tctl and CCD, SVI2 VID, RAPL energy) live in `src/core/sensor_math.h` as pure functions, and the JSON/CSV serializers in `src/core/export.c` work on a plain struct — so both can be tested without hardware or privileges:
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+---
+
+## Exporting Readings
+
+`hwsense_read_all()` fills a `hwsense_sensor_data_t`, which can be serialized to JSON or CSV for logging and monitoring integrations.
+
+```c
+#include "hwsense_unified.h"
+
+hwsense_sensor_data_t data;
+hwsense_read_all(ctx, &data);
+
+char json[2048];
+hwsense_export_json(&data, json, sizeof(json));
+puts(json);
+```
+
+All three writers (`hwsense_export_json`, `hwsense_export_csv_header`, `hwsense_export_csv_row`) follow the `snprintf` contract: they return the length the full output needs, excluding the terminator. A return value `>= buf_size` means the output was truncated, so you can size a buffer exactly:
+
+```c
+int n = hwsense_export_json(&data, NULL, 0);   /* measure */
+char *buf = malloc(n + 1);
+hwsense_export_json(&data, buf, n + 1);        /* write */
+```
+
+Strings are escaped properly — JSON per RFC 8259, CSV per RFC 4180 — so a CPU or drive name containing a quote or comma will not corrupt the output.
 
 ---
 
@@ -282,6 +309,7 @@ libhwsense/
 │   │   ├── driver_linux.c     /dev/cpu/N/msr lifecycle + dispatch (Linux)
 │   │   ├── api.c              Vendor dispatch (AMD/Intel)
 │   │   ├── sensor_math.h      Pure register-decode math (unit-tested)
+│   │   ├── export.c           JSON/CSV serialization (unit-tested)
 │   │   ├── wmi.c              WMI sensor queries
 │   │   ├── win_sysstats.c     System stats (memory, CPU, disk)
 │   │   └── hwsense_unified.c  Unified API implementation
@@ -305,7 +333,8 @@ libhwsense/
 │   ├── read_sensors.c         Simple unified API example
 │   └── read_homelab_sensors.c Standalone Linux sensor reader
 ├── tests/
-│   └── test_sensor_math.c     Register-decode unit tests (no hardware)
+│   ├── test_sensor_math.c     Register-decode unit tests (no hardware)
+│   └── test_export.c          JSON/CSV serialization tests
 ├── CMakeLists.txt             Builds hwsense.dll
 ├── LICENSE                    AGPL-3.0
 ├── USAGE.md                   Python/C#/Rust usage examples

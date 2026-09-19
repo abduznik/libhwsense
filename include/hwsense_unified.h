@@ -134,6 +134,34 @@ double hwsense_get_memory_used(hwsense_ctx_t *ctx);
  */
 void hwsense_print_report(hwsense_ctx_t *ctx);
 
+/*
+ * Serialize a sensor snapshot to JSON.
+ *
+ * Writes into buf and returns the number of characters the full output
+ * needs, excluding the terminator — the same contract as snprintf. A
+ * return value >= buf_size means the output was truncated; call again
+ * with a buffer of at least (return value + 1) bytes. Passing buf_size
+ * of 0 (with any buf) measures the required size without writing.
+ *
+ * Returns -1 if data is NULL, buf_size is negative, or buf is NULL with
+ * a nonzero buf_size.
+ */
+HWSENSE_API int hwsense_export_json(const hwsense_sensor_data_t *data,
+                                    char *buf, int buf_size);
+
+/*
+ * Write the CSV column header. Same buffer contract as the JSON writer.
+ * The column order matches hwsense_export_csv_row.
+ */
+HWSENSE_API int hwsense_export_csv_header(char *buf, int buf_size);
+
+/*
+ * Serialize a sensor snapshot as one CSV row, matching the column order
+ * of hwsense_export_csv_header. Same buffer contract as above.
+ */
+HWSENSE_API int hwsense_export_csv_row(const hwsense_sensor_data_t *data,
+                                       char *buf, int buf_size);
+
 #ifdef __cplusplus
 }
 #endif

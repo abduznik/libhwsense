@@ -11,6 +11,7 @@ if(WIN32)
         src/core/win_sysstats.c
         src/core/wmi.c
         src/core/hwsense_unified.c
+        src/core/export.c
         src/cpu/amd_zen.c
         src/cpu/amd_svi2.c
         src/cpu/amd_smu.c
@@ -57,11 +58,19 @@ else()
 endif()
 target_link_libraries(read_cpu_temp PRIVATE hwsense)
 
-# Tests: pure register-decode math, no hardware needed
+# Tests: pure math and serialization, no hardware needed
 enable_testing()
+
 add_executable(test_sensor_math tests/test_sensor_math.c)
 target_include_directories(test_sensor_math PRIVATE src)
 if(NOT WIN32)
     target_link_libraries(test_sensor_math PRIVATE m)
 endif()
 add_test(NAME sensor_math COMMAND test_sensor_math)
+
+# export.c is compiled into the test directly rather than linked from the
+# shared library, so the serializers can be tested on platforms where the
+# rest of the library does not build.
+add_executable(test_export tests/test_export.c src/core/export.c)
+target_include_directories(test_export PRIVATE src include)
+add_test(NAME export COMMAND test_export)
