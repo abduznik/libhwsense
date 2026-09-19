@@ -1,0 +1,48 @@
+# Doxygen configuration for libhwsense.
+#
+# Documents the public API only — the two installed headers. Internal
+# sources are deliberately excluded: this is the reference a consumer of
+# the library needs, not a tour of the implementation.
+#
+# Build locally with:  doxygen docs/Doxyfile
+# Output lands in:     docs/html/
+
+PROJECT_NAME           = libhwsense
+PROJECT_BRIEF          = "Hardware sensor reading library for Windows and Linux"
+PROJECT_NUMBER         = 0.3.0
+
+OUTPUT_DIRECTORY       = docs
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+
+INPUT                  = include README.md
+USE_MDFILE_AS_MAINPAGE = README.md
+FILE_PATTERNS          = *.h *.md
+RECURSIVE              = NO
+
+# The headers use plain /* */ comments rather than Doxygen markup, so
+# pick those up as documentation rather than producing an empty reference.
+JAVADOC_AUTOBRIEF      = YES
+EXTRACT_ALL            = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+TYPEDEF_HIDES_STRUCT   = YES
+
+# Both headers are guarded by _WIN32 in places. Define it so the Windows
+# API surface is documented; the Linux-only differences are called out in
+# the README rather than being a separate doc build.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = _WIN32 \
+                         HWSENSE_API= \
+                         __cplusplus=
+
+SORT_MEMBER_DOCS       = NO
+ALPHABETICAL_INDEX     = YES
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO

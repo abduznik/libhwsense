@@ -10,6 +10,8 @@
 
 A lightweight C library for reading hardware sensors. Supports Intel and AMD CPUs, NVIDIA and AMD GPUs, and system metrics on Windows; Intel CPU temperature on Linux.
 
+**API reference:** https://abduznik.github.io/libhwsense/ (generated from the public headers on every push to `main`)
+
 **For usage examples in Python, C#, and Rust/Tauri, see [USAGE.md](USAGE.md)**
 
 ## What We Built

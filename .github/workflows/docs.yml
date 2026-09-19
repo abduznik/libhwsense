@@ -1,0 +1,60 @@
+name: Docs
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Allow publishing to Pages, and only one deployment at a time.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Doxygen
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz
+
+    - name: Generate docs
+      run: doxygen docs/Doxyfile
+
+    # Doxygen exits 0 even when it produces nothing useful, so check the
+    # output actually contains the API rather than trusting the exit code.
+    - name: Verify output
+      run: |
+        test -f docs/html/index.html
+        for sym in hwsense_init hwsense_cpu_package_temp hwsense_export_json hwsense_alert_step; do
+          grep -rq "$sym" docs/html/ || { echo "missing from docs: $sym"; exit 1; }
+        done
+        echo "docs contain the expected API symbols"
+
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: docs/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

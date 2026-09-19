@@ -13,3 +13,12 @@ test_gcc.c
 # Output files
 output.txt
 error.txt
+
+# CMake build trees
+build/
+build_*/
+_prefix/
+_consumer/
+
+# Generated documentation
+docs/html/
