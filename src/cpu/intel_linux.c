@@ -15,6 +15,7 @@
 #ifndef _WIN32
 
 #include "../core/hwsense_internal.h"
+#include "../core/sensor_math.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <fcntl.h>
@@ -44,9 +45,8 @@ hwsense_temp_result_t hwsense_intel_core_temp_linux(void)
 {
     hwsense_temp_result_t r = {0};
     uint64_t msr_val;
-    unsigned int eax;
-    unsigned int tj_max;
-    unsigned int digital_readout;
+    uint32_t temp_target_eax;
+    uint32_t therm_status_eax;
 
     if (!read_msr(0, MSR_IA32_TEMPERATURE_TARGET, &msr_val)) {
         snprintf(r.error, sizeof(r.error),
@@ -54,30 +54,22 @@ hwsense_temp_result_t hwsense_intel_core_temp_linux(void)
                  "and the msr kernel module loaded)", MSR_IA32_TEMPERATURE_TARGET);
         return r;
     }
-
-    eax = (unsigned int)(msr_val & 0xFFFFFFFF);
-    tj_max = (eax >> 16) & 0xFF;
-
-    if (tj_max < 50 || tj_max > 150)
-        tj_max = 100;
+    temp_target_eax = (uint32_t)(msr_val & 0xFFFFFFFF);
 
     if (!read_msr(0, MSR_IA32_THERM_STATUS, &msr_val)) {
         snprintf(r.error, sizeof(r.error),
                  "RDMSR 0x%X failed on /dev/cpu/0/msr", MSR_IA32_THERM_STATUS);
         return r;
     }
+    therm_status_eax = (uint32_t)(msr_val & 0xFFFFFFFF);
 
-    eax = (unsigned int)(msr_val & 0xFFFFFFFF);
-
-    if (!((eax >> 31) & 1)) {
+    if (!hwsense_intel_therm_valid(therm_status_eax)) {
         snprintf(r.error, sizeof(r.error), "Thermal reading not valid (bit 31 = 0)");
         return r;
     }
 
-    digital_readout = (eax >> 16) & 0x7F;
-
     r.ok = 1;
-    r.celsius = (double)tj_max - (double)digital_readout;
+    r.celsius = hwsense_intel_temp_c(temp_target_eax, therm_status_eax);
     return r;
 }
 

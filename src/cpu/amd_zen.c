@@ -7,6 +7,7 @@
 
 #include "../core/hwsense_internal.h"
 #include "../core/ioctl_codes.h"
+#include "../core/sensor_math.h"
 #include <stdio.h>
 #include <intrin.h>
 
@@ -129,8 +130,6 @@ hwsense_temp_result_t hwsense_amd_package_temp(HANDLE driver_handle)
 {
     hwsense_temp_result_t r = {0};
     DWORD raw = 0;
-    int offset_flag;
-    double temp;
 
     if (!smn_read(driver_handle, AMD_F17H_TEMP_REGISTER, &raw)) {
         r.ok = 0;
@@ -140,14 +139,8 @@ hwsense_temp_result_t hwsense_amd_package_temp(HANDLE driver_handle)
         return r;
     }
 
-    offset_flag = ((raw & 0x80000) != 0) || ((raw & 0x30000) == 0x30000);
-
-    temp = ((double)(raw >> 21) * 125.0) / 1000.0;
-    if (offset_flag)
-        temp -= 49.0;
-
     r.ok = 1;
-    r.celsius = temp;
+    r.celsius = hwsense_amd_tctl_c((uint32_t)raw);
     return r;
 }
 
@@ -174,17 +167,10 @@ hwsense_ccd_temps_t hwsense_amd_ccd_temps(hwsense_ctx_t *ctx)
         if (!smn_read(ctx->driver_handle, smn_addr, &raw))
             continue;
 
-        DWORD raw12 = raw & 0xFFF;
-
-        if (raw12 == 0 && raw == 0)
+        if (!hwsense_amd_ccd_temp_plausible((uint32_t)raw))
             continue;
 
-        double temp = ((double)(raw12 * 125) - 305000.0) / 1000.0;
-
-        if (temp < -40.0 || temp > 150.0)
-            continue;
-
-        result.celsius[i] = temp;
+        result.celsius[i] = hwsense_amd_ccd_temp_c((uint32_t)raw);
         result.available[i] = 1;
         result.count++;
     }

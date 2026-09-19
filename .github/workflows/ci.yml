@@ -21,6 +21,9 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
+    - name: Test
+      run: ctest --test-dir build -C Release --output-on-failure
+
   linux:
     runs-on: ubuntu-latest
 
@@ -33,6 +36,9 @@ jobs:
 
     - name: Build
       run: cmake --build build
+
+    - name: Test
+      run: ctest --test-dir build --output-on-failure
 
     - name: Smoke test
       # No MSR access on CI runners, so the read is expected to fail — this

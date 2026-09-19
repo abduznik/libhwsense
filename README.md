@@ -259,6 +259,14 @@ sudo ./build/read_cpu_temp
 
 MSR access goes through `/dev/cpu/N/msr`, which needs the `msr` kernel module and root (or `CAP_SYS_RAWIO`). No kernel driver to install.
 
+### Tests
+
+The register-decode formulas (Intel TjMax/thermal status, AMD Tctl and CCD, SVI2 VID, RAPL energy) live in `src/core/sensor_math.h` as pure functions, so they can be tested without hardware or privileges:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
 ---
 
 ## Project Structure
@@ -273,6 +281,7 @@ libhwsense/
 │   │   ├── driver.c           WinRing0 driver lifecycle (Windows)
 │   │   ├── driver_linux.c     /dev/cpu/N/msr lifecycle + dispatch (Linux)
 │   │   ├── api.c              Vendor dispatch (AMD/Intel)
+│   │   ├── sensor_math.h      Pure register-decode math (unit-tested)
 │   │   ├── wmi.c              WMI sensor queries
 │   │   ├── win_sysstats.c     System stats (memory, CPU, disk)
 │   │   └── hwsense_unified.c  Unified API implementation
@@ -295,6 +304,8 @@ libhwsense/
 │   ├── read_cpu_temp_linux.c  CPU temperature CLI (Linux)
 │   ├── read_sensors.c         Simple unified API example
 │   └── read_homelab_sensors.c Standalone Linux sensor reader
+├── tests/
+│   └── test_sensor_math.c     Register-decode unit tests (no hardware)
 ├── CMakeLists.txt             Builds hwsense.dll
 ├── LICENSE                    AGPL-3.0
 ├── USAGE.md                   Python/C#/Rust usage examples

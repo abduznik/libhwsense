@@ -56,3 +56,12 @@ else()
     add_executable(read_cpu_temp examples/read_cpu_temp_linux.c)
 endif()
 target_link_libraries(read_cpu_temp PRIVATE hwsense)
+
+# Tests: pure register-decode math, no hardware needed
+enable_testing()
+add_executable(test_sensor_math tests/test_sensor_math.c)
+target_include_directories(test_sensor_math PRIVATE src)
+if(NOT WIN32)
+    target_link_libraries(test_sensor_math PRIVATE m)
+endif()
+add_test(NAME sensor_math COMMAND test_sensor_math)
