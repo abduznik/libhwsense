@@ -78,23 +78,25 @@ int hwsense_check_temp_alert(hwsense_ctx_t *ctx,
                              hwsense_alert_fn callback,
                              void *user_data)
 {
-    double temp;
+    hwsense_temp_result_t temp;
     int event;
 
     if (!ctx || !alert)
         return HWSENSE_ALERT_EVENT_NONE;
 
-    temp = hwsense_get_cpu_temp(ctx);
+    /* Call the core reader rather than the unified wrapper, which is only
+     * built on Windows. */
+    temp = hwsense_cpu_package_temp(ctx);
 
     /* A failed read is not a recovery — leaving the state untouched means
      * a sensor that drops out mid-breach does not silently clear. */
-    if (temp < 0.0)
+    if (!temp.ok)
         return HWSENSE_ALERT_EVENT_NONE;
 
-    event = hwsense_alert_step(alert, temp);
+    event = hwsense_alert_step(alert, temp.celsius);
 
     if (event != HWSENSE_ALERT_EVENT_NONE && callback)
-        callback(event, temp, user_data);
+        callback(event, temp.celsius, user_data);
 
     return event;
 }

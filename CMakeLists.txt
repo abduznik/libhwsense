@@ -27,9 +27,15 @@ else()
     # Linux: MSR access via /dev/cpu/N/msr, no kernel driver needed.
     # Only the Intel CPU temperature path is ported so far — the WinRing0,
     # WMI, ADL, Super I/O and EC backends are Windows-only.
+    #
+    # export.c and alert.c are platform-independent, and the installed
+    # headers declare them unconditionally, so they must be built here too
+    # or a Linux consumer gets undefined references.
     set(HWSENSE_SOURCES
         src/core/driver_linux.c
         src/cpu/intel_linux.c
+        src/core/export.c
+        src/core/alert.c
     )
 endif()
 
