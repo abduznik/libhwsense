@@ -12,6 +12,7 @@ if(WIN32)
         src/core/wmi.c
         src/core/hwsense_unified.c
         src/core/export.c
+        src/core/alert.c
         src/cpu/amd_zen.c
         src/cpu/amd_svi2.c
         src/cpu/amd_smu.c
@@ -74,3 +75,10 @@ add_test(NAME sensor_math COMMAND test_sensor_math)
 add_executable(test_export tests/test_export.c src/core/export.c)
 target_include_directories(test_export PRIVATE src include)
 add_test(NAME export COMMAND test_export)
+
+# HWSENSE_ALERT_LOGIC_ONLY drops the one function that reads a live
+# sensor, leaving the threshold logic the tests actually cover.
+add_executable(test_alert tests/test_alert.c src/core/alert.c)
+target_include_directories(test_alert PRIVATE src include)
+target_compile_definitions(test_alert PRIVATE HWSENSE_ALERT_LOGIC_ONLY)
+add_test(NAME alert COMMAND test_alert)

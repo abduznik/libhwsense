@@ -134,6 +134,75 @@ double hwsense_get_memory_used(hwsense_ctx_t *ctx);
  */
 void hwsense_print_report(hwsense_ctx_t *ctx);
 
+/* ── Threshold alerts ──────────────────────────────────────────────── */
+
+/* Alert states. */
+#define HWSENSE_ALERT_OK        0
+#define HWSENSE_ALERT_BREACHED  1
+
+/* Events returned by hwsense_alert_step / hwsense_check_temp_alert. */
+#define HWSENSE_ALERT_EVENT_NONE       0
+#define HWSENSE_ALERT_EVENT_BREACH     1
+#define HWSENSE_ALERT_EVENT_RECOVERED  2
+
+/*
+ * Tracks one threshold over successive readings.
+ *
+ * Alerts are edge-triggered: a breach fires once when the reading crosses
+ * the threshold, not on every poll while it stays above. Recovery requires
+ * the reading to fall to (threshold - hysteresis) or below, so a value
+ * hovering at the threshold does not flap between states on sensor noise.
+ *
+ * Treat the fields as read-only; use hwsense_alert_init to set one up.
+ */
+typedef struct {
+    double threshold;   /* breach when a reading goes above this */
+    double hysteresis;  /* margin below the threshold required to recover */
+    double last_value;  /* most recent reading passed in */
+    int    state;       /* HWSENSE_ALERT_OK or HWSENSE_ALERT_BREACHED */
+    int    breach_count;/* number of breaches since init */
+} hwsense_alert_t;
+
+/*
+ * Called when an alert changes state.
+ *   event     — HWSENSE_ALERT_EVENT_BREACH or _RECOVERED
+ *   value     — the reading that triggered it
+ *   user_data — passed through untouched
+ */
+typedef void (*hwsense_alert_fn)(int event, double value, void *user_data);
+
+/*
+ * Set up an alert. A hysteresis of 0 means recovery happens as soon as the
+ * reading is back at or below the threshold; a negative value is treated
+ * as 0.
+ */
+HWSENSE_API void hwsense_alert_init(hwsense_alert_t *alert,
+                                    double threshold,
+                                    double hysteresis);
+
+/*
+ * Feed one reading in and return the resulting event (usually
+ * HWSENSE_ALERT_EVENT_NONE). Touches no hardware, so it can be driven
+ * from readings obtained any way the caller likes.
+ */
+HWSENSE_API int hwsense_alert_step(hwsense_alert_t *alert, double value);
+
+/* Current state: HWSENSE_ALERT_OK or HWSENSE_ALERT_BREACHED. */
+HWSENSE_API int hwsense_alert_state(const hwsense_alert_t *alert);
+
+/*
+ * Read the CPU temperature once and feed it to the alert, invoking the
+ * callback if the state changed. Returns the event.
+ *
+ * This is a single step, not a loop — the caller decides the polling
+ * interval and which thread it runs on. A failed sensor read leaves the
+ * alert state untouched rather than counting as a recovery.
+ */
+HWSENSE_API int hwsense_check_temp_alert(hwsense_ctx_t *ctx,
+                                         hwsense_alert_t *alert,
+                                         hwsense_alert_fn callback,
+                                         void *user_data);
+
 /*
  * Serialize a sensor snapshot to JSON.
  *

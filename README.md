@@ -296,6 +296,40 @@ Strings are escaped properly — JSON per RFC 8259, CSV per RFC 4180 — so a CP
 
 ---
 
+## Threshold Alerts
+
+Alerts are **edge-triggered**: a breach fires once when a reading crosses the threshold, not on every poll while it stays above. Recovery requires falling a hysteresis margin below the threshold, so a reading hovering at the limit doesn't flap.
+
+```c
+#include "hwsense_unified.h"
+
+static void on_alert(int event, double value, void *user_data)
+{
+    if (event == HWSENSE_ALERT_EVENT_BREACH)
+        printf("CPU hit %.1f C\n", value);
+    else
+        printf("CPU back to %.1f C\n", value);
+}
+
+hwsense_alert_t alert;
+hwsense_alert_init(&alert, 90.0, 5.0);  /* breach above 90 C, recover at 85 C */
+
+while (running) {
+    hwsense_check_temp_alert(ctx, &alert, on_alert, NULL);
+    sleep_ms(1000);   /* you choose the interval and the thread */
+}
+```
+
+`hwsense_check_temp_alert()` performs a single check rather than owning a loop, so the polling interval and threading are the caller's decision. A failed sensor read leaves the alert state untouched rather than counting as a recovery.
+
+To drive alerts from readings you already have — or from a sensor other than CPU temperature — use `hwsense_alert_step()` directly:
+
+```c
+int event = hwsense_alert_step(&alert, my_reading);
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -310,6 +344,7 @@ libhwsense/
 │   │   ├── api.c              Vendor dispatch (AMD/Intel)
 │   │   ├── sensor_math.h      Pure register-decode math (unit-tested)
 │   │   ├── export.c           JSON/CSV serialization (unit-tested)
+│   │   ├── alert.c            Threshold alert logic (unit-tested)
 │   │   ├── wmi.c              WMI sensor queries
 │   │   ├── win_sysstats.c     System stats (memory, CPU, disk)
 │   │   └── hwsense_unified.c  Unified API implementation
@@ -334,7 +369,8 @@ libhwsense/
 │   └── read_homelab_sensors.c Standalone Linux sensor reader
 ├── tests/
 │   ├── test_sensor_math.c     Register-decode unit tests (no hardware)
-│   └── test_export.c          JSON/CSV serialization tests
+│   ├── test_export.c          JSON/CSV serialization tests
+│   └── test_alert.c           Threshold alert tests
 ├── CMakeLists.txt             Builds hwsense.dll
 ├── LICENSE                    AGPL-3.0
 ├── USAGE.md                   Python/C#/Rust usage examples
