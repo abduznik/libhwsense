@@ -24,6 +24,10 @@ typedef enum {
     AMD_CODENAME_CEZANNE,
     AMD_CODENAME_MILAN,
     AMD_CODENAME_CASTLEPEAK,
+    AMD_CODENAME_REMBRANDT,
+    AMD_CODENAME_RAPHAEL,
+    AMD_CODENAME_PHOENIX,
+    AMD_CODENAME_GRANITE_RIDGE,
 } amd_codename_t;
 
 static amd_codename_t detect_codename(void)
@@ -54,6 +58,15 @@ static amd_codename_t detect_codename(void)
         case 0x20: return AMD_CODENAME_VERMEER;
         case 0x50: return AMD_CODENAME_CEZANNE;
         case 0x01: return AMD_CODENAME_MILAN;
+        case 0x44: return AMD_CODENAME_REMBRANDT;
+        case 0x61: return AMD_CODENAME_RAPHAEL;
+        case 0x74:
+        case 0x78: return AMD_CODENAME_PHOENIX;
+        default:   return AMD_CODENAME_UNKNOWN;
+        }
+    } else if (family == 0x1A) {
+        switch (model) {
+        case 0x44: return AMD_CODENAME_GRANITE_RIDGE;
         default:   return AMD_CODENAME_UNKNOWN;
         }
     }
@@ -89,11 +102,27 @@ static const smu_config_t smu_configs[] = {
       .cmd_get_version = 0x06, .cmd_get_dram_base = 0x66,
       .cmd_transfer_to_dram = 0x65, .cmd_transfer_arg0 = 3,
       .cpuid_family = 0x17, .cpuid_model = 0x60, .name = "Renoir" },
+    /* Zen2 HEDT/server, same mailbox layout as Matisse. detect_codename
+     * already recognized it, but it had no config entry, so the lookup
+     * returned NULL. */
+    { .mp1_msg = 0x3B10530, .mp1_rsp = 0x3B1057C, .mp1_arg = 0x3B109C4,
+      .rsmu_msg = 0x3B10524, .rsmu_rsp = 0x3B10570, .rsmu_arg = 0x3B10A40,
+      .cmd_get_version = 0x08, .cmd_get_dram_base = 0x06,
+      .cmd_transfer_to_dram = 0x05, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x17, .cpuid_model = 0x31, .name = "CastlePeak" },
     { .mp1_msg = 0x3B10530, .mp1_rsp = 0x3B1057C, .mp1_arg = 0x3B109C4,
       .rsmu_msg = 0x3B10524, .rsmu_rsp = 0x3B10570, .rsmu_arg = 0x3B10A40,
       .cmd_get_version = 0x08, .cmd_get_dram_base = 0x06,
       .cmd_transfer_to_dram = 0x05, .cmd_transfer_arg0 = 0,
       .cpuid_family = 0x19, .cpuid_model = 0x21, .name = "Vermeer" },
+    /* Vermeer also reports model 0x20. detect_codename already treated it
+     * as Vermeer, but the config lookup matches family+model exactly, so
+     * without this entry those parts got no SMU config at all. */
+    { .mp1_msg = 0x3B10530, .mp1_rsp = 0x3B1057C, .mp1_arg = 0x3B109C4,
+      .rsmu_msg = 0x3B10524, .rsmu_rsp = 0x3B10570, .rsmu_arg = 0x3B10A40,
+      .cmd_get_version = 0x08, .cmd_get_dram_base = 0x06,
+      .cmd_transfer_to_dram = 0x05, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x19, .cpuid_model = 0x20, .name = "Vermeer" },
     { .mp1_msg = 0x3B10528, .mp1_rsp = 0x3B10564, .mp1_arg = 0x3B10998,
       .rsmu_msg = 0x3B10A20, .rsmu_rsp = 0x3B10A80, .rsmu_arg = 0x3B10A88,
       .cmd_get_version = 0x06, .cmd_get_dram_base = 0x66,
@@ -104,6 +133,57 @@ static const smu_config_t smu_configs[] = {
       .cmd_get_version = 0x08, .cmd_get_dram_base = 0x06,
       .cmd_transfer_to_dram = 0x05, .cmd_transfer_arg0 = 0,
       .cpuid_family = 0x19, .cpuid_model = 0x01, .name = "Milan" },
+
+    /*
+     * The entries below are UNVERIFIED — transcribed from the published
+     * tables in LibreHardwareMonitor (Hardware/Cpu/Amd17Cpu.cs) and
+     * irusanov/SMUDebugTool, not confirmed against real silicon, because
+     * no Zen4/Zen5 part was available to test on.
+     *
+     * The APU and desktop parts use different mailbox layouts, which is
+     * why Rembrandt/Phoenix do not share Raphael's offsets despite being
+     * the same CPUID family.
+     *
+     * If a reading looks wrong on one of these, suspect the offsets here
+     * before suspecting the decode math — a wrong mailbox address returns
+     * plausible-looking garbage rather than failing outright.
+     */
+
+    /* Zen3+ mobile APU (Rembrandt) — APU mailbox layout, as Renoir. */
+    { .mp1_msg = 0x3B10528, .mp1_rsp = 0x3B10564, .mp1_arg = 0x3B10998,
+      .rsmu_msg = 0x3B10A20, .rsmu_rsp = 0x3B10A80, .rsmu_arg = 0x3B10A88,
+      .cmd_get_version = 0x06, .cmd_get_dram_base = 0x66,
+      .cmd_transfer_to_dram = 0x65, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x19, .cpuid_model = 0x44, .name = "Rembrandt" },
+
+    /* Zen4 desktop (Raphael) — desktop mailbox layout, as Vermeer. */
+    { .mp1_msg = 0x3B10530, .mp1_rsp = 0x3B1057C, .mp1_arg = 0x3B109C4,
+      .rsmu_msg = 0x3B10524, .rsmu_rsp = 0x3B10570, .rsmu_arg = 0x3B10A40,
+      .cmd_get_version = 0x08, .cmd_get_dram_base = 0x06,
+      .cmd_transfer_to_dram = 0x05, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x19, .cpuid_model = 0x61, .name = "Raphael" },
+
+    /* Zen4 mobile APU (Phoenix) — APU mailbox layout. */
+    { .mp1_msg = 0x3B10528, .mp1_rsp = 0x3B10564, .mp1_arg = 0x3B10998,
+      .rsmu_msg = 0x3B10A20, .rsmu_rsp = 0x3B10A80, .rsmu_arg = 0x3B10A88,
+      .cmd_get_version = 0x06, .cmd_get_dram_base = 0x66,
+      .cmd_transfer_to_dram = 0x65, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x19, .cpuid_model = 0x74, .name = "Phoenix" },
+
+    /* Phoenix 2. Separate entry because the lookup matches family+model
+     * exactly, so it would otherwise fall through to no config at all. */
+    { .mp1_msg = 0x3B10528, .mp1_rsp = 0x3B10564, .mp1_arg = 0x3B10998,
+      .rsmu_msg = 0x3B10A20, .rsmu_rsp = 0x3B10A80, .rsmu_arg = 0x3B10A88,
+      .cmd_get_version = 0x06, .cmd_get_dram_base = 0x66,
+      .cmd_transfer_to_dram = 0x65, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x19, .cpuid_model = 0x78, .name = "Phoenix" },
+
+    /* Zen5 desktop (Granite Ridge) — keeps the Raphael desktop layout. */
+    { .mp1_msg = 0x3B10530, .mp1_rsp = 0x3B1057C, .mp1_arg = 0x3B109C4,
+      .rsmu_msg = 0x3B10524, .rsmu_rsp = 0x3B10570, .rsmu_arg = 0x3B10A40,
+      .cmd_get_version = 0x08, .cmd_get_dram_base = 0x06,
+      .cmd_transfer_to_dram = 0x05, .cmd_transfer_arg0 = 0,
+      .cpuid_family = 0x1A, .cpuid_model = 0x44, .name = "Granite Ridge" },
 };
 
 #define SMU_CONFIG_COUNT (sizeof(smu_configs) / sizeof(smu_configs[0]))
