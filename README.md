@@ -259,6 +259,25 @@ sudo ./build/read_cpu_temp
 
 MSR access goes through `/dev/cpu/N/msr`, which needs the `msr` kernel module and root (or `CAP_SYS_RAWIO`). No kernel driver to install.
 
+### Installing
+
+```bash
+cmake --install build --prefix /usr/local
+```
+
+Consumers using CMake can then link against the imported target:
+
+```cmake
+find_package(hwsense 0.3 REQUIRED)
+target_link_libraries(myapp PRIVATE hwsense::hwsense)
+```
+
+On Linux, a pkg-config file is installed too:
+
+```bash
+pkg-config --cflags --libs hwsense
+```
+
 ### Tests
 
 The register-decode formulas (Intel TjMax/thermal status, AMD Tctl and CCD, SVI2 VID, RAPL energy) live in `src/core/sensor_math.h` as pure functions, and the JSON/CSV serializers in `src/core/export.c` work on a plain struct — so both can be tested without hardware or privileges:
@@ -371,7 +390,10 @@ libhwsense/
 │   ├── test_sensor_math.c     Register-decode unit tests (no hardware)
 │   ├── test_export.c          JSON/CSV serialization tests
 │   └── test_alert.c           Threshold alert tests
-├── CMakeLists.txt             Builds hwsense.dll
+├── cmake/
+│   ├── hwsenseConfig.cmake.in CMake package config template
+│   └── hwsense.pc.in          pkg-config template (Linux)
+├── CMakeLists.txt             Build + install rules
 ├── LICENSE                    AGPL-3.0
 ├── USAGE.md                   Python/C#/Rust usage examples
 └── build/

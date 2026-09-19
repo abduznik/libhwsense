@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(libhwsense C)
+project(libhwsense VERSION 0.3.0 LANGUAGES C)
 
 if(WIN32)
     # Define HWSENSE_DLL_EXPORTS for DLL builds
@@ -35,8 +35,17 @@ endif()
 
 add_library(hwsense SHARED ${HWSENSE_SOURCES})
 
-target_include_directories(hwsense PUBLIC include)
+target_include_directories(hwsense
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 target_include_directories(hwsense PRIVATE src)
+
+set_target_properties(hwsense PROPERTIES
+    VERSION   ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
 
 if(WIN32)
     # Link Win32 APIs and COM libraries
@@ -82,3 +91,54 @@ add_executable(test_alert tests/test_alert.c src/core/alert.c)
 target_include_directories(test_alert PRIVATE src include)
 target_compile_definitions(test_alert PRIVATE HWSENSE_ALERT_LOGIC_ONLY)
 add_test(NAME alert COMMAND test_alert)
+
+# ── Install ───────────────────────────────────────────────────────────
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS hwsense
+    EXPORT hwsenseTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES
+    include/hwsense.h
+    include/hwsense_unified.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Lets consumers do find_package(hwsense) + target_link_libraries(app hwsense::hwsense)
+install(EXPORT hwsenseTargets
+    FILE        hwsenseTargets.cmake
+    NAMESPACE   hwsense::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/hwsense
+)
+
+configure_package_config_file(
+    cmake/hwsenseConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/hwsenseConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/hwsense
+)
+
+# SameMajorVersion: the API is not yet stable across minor releases.
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/hwsenseConfigVersion.cmake
+    VERSION       ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/hwsenseConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/hwsenseConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/hwsense
+)
+
+# pkg-config, for Linux consumers not using CMake
+if(NOT WIN32)
+    configure_file(cmake/hwsense.pc.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/hwsense.pc @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/hwsense.pc
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+endif()

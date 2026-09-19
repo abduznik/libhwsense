@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: hwsense
+Description: Hardware sensor reading library (CPU temperature, voltage, power)
+URL: https://github.com/abduznik/libhwsense
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lhwsense
+Cflags: -I${includedir}

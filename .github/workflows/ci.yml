@@ -45,3 +45,49 @@ jobs:
       # only checks the binary links and reports a clean error instead of
       # crashing.
       run: ./build/read_cpu_temp || true
+
+    - name: Install
+      run: cmake --install build --prefix "$PWD/_prefix"
+
+    # Proves the installed package is actually consumable, rather than just
+    # that the install step produced files.
+    - name: Consume via find_package
+      run: |
+        mkdir -p _consumer
+        cat > _consumer/main.c <<'EOF'
+        #include <hwsense.h>
+        #include <hwsense_unified.h>
+        #include <stdio.h>
+        #include <string.h>
+        int main(void) {
+            hwsense_alert_t a;
+            hwsense_sensor_data_t d;
+            char buf[2048];
+            memset(&d, 0, sizeof(d));
+            hwsense_alert_init(&a, 90.0, 5.0);
+            if (hwsense_alert_step(&a, 95.0) != HWSENSE_ALERT_EVENT_BREACH)
+                return 1;
+            if (hwsense_export_json(&d, buf, sizeof(buf)) <= 0)
+                return 1;
+            printf("consumer ok\n");
+            return 0;
+        }
+        EOF
+        cat > _consumer/CMakeLists.txt <<'EOF'
+        cmake_minimum_required(VERSION 3.15)
+        project(consumer C)
+        find_package(hwsense 0.3 REQUIRED)
+        add_executable(consumer main.c)
+        target_link_libraries(consumer PRIVATE hwsense::hwsense)
+        EOF
+        cmake -S _consumer -B _consumer/build -DCMAKE_PREFIX_PATH="$PWD/_prefix"
+        cmake --build _consumer/build
+        LD_LIBRARY_PATH="$PWD/_prefix/lib" ./_consumer/build/consumer
+
+    - name: Check pkg-config metadata
+      run: |
+        export PKG_CONFIG_PATH="$PWD/_prefix/lib/pkgconfig"
+        pkg-config --exists hwsense
+        test "$(pkg-config --modversion hwsense)" = "0.3.0"
+        echo "cflags: $(pkg-config --cflags hwsense)"
+        echo "libs:   $(pkg-config --libs hwsense)"
