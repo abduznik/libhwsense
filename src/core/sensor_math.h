@@ -13,6 +13,7 @@
 #define HWSENSE_SENSOR_MATH_H
 
 #include <stdint.h>
+#include <string.h>
 
 /*
  * Intel: temperature from IA32_TEMPERATURE_TARGET (MSR 0x1A2) and
@@ -102,6 +103,32 @@ static uint32_t hwsense_svi2_vid(uint32_t raw)
 static double hwsense_svi2_vid_to_volts(uint32_t vid)
 {
     return (double)vid * 0.00625;
+}
+
+/*
+ * Is this CPU family one whose sensor register layout we know?
+ *
+ * CPUID reports the family as a number, so the values must be written in
+ * hex to line up with the 15h/17h/19h names the vendors use — writing
+ * them in decimal silently fails to match every Zen part.
+ *
+ * `vendor` is the CPUID vendor string ("GenuineIntel", "AuthenticAMD").
+ */
+static int hwsense_cpu_family_known(const char *vendor, int family)
+{
+    if (!vendor)
+        return 0;
+
+    if (strstr(vendor, "Intel"))
+        return family == 0x6;   /* Core/Atom */
+
+    if (strstr(vendor, "AMD"))
+        return family == 0x15 || /* Bulldozer */
+               family == 0x17 || /* Zen / Zen2 */
+               family == 0x19 || /* Zen3 / Zen4 */
+               family == 0x1A;   /* Zen5 */
+
+    return 0;
 }
 
 /*

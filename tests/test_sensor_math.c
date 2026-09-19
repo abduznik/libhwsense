@@ -140,6 +140,44 @@ static void test_svi2(void)
     check_int("svi2 off marker", HWSENSE_SVI2_VID_OFF, 0x1FF);
 }
 
+static void test_family_known(void)
+{
+    /* Intel Core/Atom. */
+    check_int("intel family 6 known",
+              hwsense_cpu_family_known("GenuineIntel", 0x6), 1);
+    check_int("intel family 5 unknown",
+              hwsense_cpu_family_known("GenuineIntel", 0x5), 0);
+
+    /*
+     * These are the values CPUID actually reports for shipping AMD parts.
+     * Writing the table in decimal instead of hex makes every one of these
+     * miss, which is the bug this guards against — a Ryzen 5 4500 reports
+     * family 0x17 (decimal 23), so a `family == 17` test never fires.
+     */
+    check_int("amd zen2 renoir (0x17) known",
+              hwsense_cpu_family_known("AuthenticAMD", 0x17), 1);
+    check_int("amd bulldozer (0x15) known",
+              hwsense_cpu_family_known("AuthenticAMD", 0x15), 1);
+    check_int("amd zen3/zen4 (0x19) known",
+              hwsense_cpu_family_known("AuthenticAMD", 0x19), 1);
+    check_int("amd zen5 (0x1A) known",
+              hwsense_cpu_family_known("AuthenticAMD", 0x1A), 1);
+
+    /* Decimal 17 is family 0x11, which is not a Zen part. */
+    check_int("amd decimal 17 is not a known family",
+              hwsense_cpu_family_known("AuthenticAMD", 17), 0);
+
+    /* Unknown vendors and NULL must not match anything. */
+    check_int("unknown vendor", hwsense_cpu_family_known("SomeOtherCPU", 0x17), 0);
+    check_int("null vendor", hwsense_cpu_family_known(NULL, 0x17), 0);
+
+    /* A vendor must not match the other vendor's family table. */
+    check_int("intel does not match amd family",
+              hwsense_cpu_family_known("GenuineIntel", 0x17), 0);
+    check_int("amd does not match intel family",
+              hwsense_cpu_family_known("AuthenticAMD", 0x6), 0);
+}
+
 static void test_rapl(void)
 {
     /* Energy unit is 1/2^bits[12:8]. Unit 16 is the common Intel value. */
@@ -170,6 +208,7 @@ int main(void)
     test_amd_tctl();
     test_amd_ccd();
     test_svi2();
+    test_family_known();
     test_rapl();
 
     printf("%d checks, %d failures\n", checks, failures);

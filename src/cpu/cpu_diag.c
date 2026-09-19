@@ -6,6 +6,7 @@
  */
 
 #include "../core/hwsense_internal.h"
+#include "../core/sensor_math.h"
 #include "cpu_diag.h"
 #include <stdio.h>
 #include <intrin.h>
@@ -45,10 +46,16 @@ static void run_cpuid(int leaf, int subleaf, int *eax, int *ebx, int *ecx, int *
 static void get_cpu_brand(char *brand, int size)
 {
     int *p = (int *)brand;
+    int end;
+
     run_cpuid(0x80000002, 0, &p[0], &p[1], &p[2], &p[3]);
     run_cpuid(0x80000003, 0, &p[4], &p[5], &p[6], &p[7]);
     run_cpuid(0x80000004, 0, &p[8], &p[9], &p[10], &p[11]);
     brand[size - 1] = '\0';
+
+    /* CPUID pads the brand string to a fixed width with spaces. */
+    for (end = (int)strlen(brand); end > 0 && brand[end - 1] == ' '; end--)
+        brand[end - 1] = '\0';
 }
 
 /*
@@ -117,16 +124,7 @@ cpu_diag_result_t cpu_diag_detect(void)
     }
 
     /* Determine if family is known for sensor support */
-    result.family_known = 0;
-    if (strstr(result.vendor, "Intel")) {
-        /* Intel families: 6 (Core), 7 (Atom), etc. */
-        if (result.family == 6)
-            result.family_known = 1;
-    } else if (strstr(result.vendor, "AMD")) {
-        /* AMD families: 15h (Bulldozer), 17h (Zen), 19h (Zen3) */
-        if (result.family == 15 || result.family == 17 || result.family == 19 || result.family == 25)
-            result.family_known = 1;
-    }
+    result.family_known = hwsense_cpu_family_known(result.vendor, result.family);
 
     /* Build supported sensors list */
     char *p = result.supported_sensors;
