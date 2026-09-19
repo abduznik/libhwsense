@@ -8,7 +8,7 @@
 ---
 # libhwsense — Hardware Sensor Library
 
-A lightweight C library for reading hardware sensors on Windows. Supports Intel and AMD CPUs, NVIDIA and AMD GPUs, and system metrics.
+A lightweight C library for reading hardware sensors. Supports Intel and AMD CPUs, NVIDIA and AMD GPUs, and system metrics on Windows; Intel CPU temperature on Linux.
 
 **For usage examples in Python, C#, and Rust/Tauri, see [USAGE.md](USAGE.md)**
 
@@ -232,16 +232,32 @@ The previous run's cleanup called `DeleteService()` but the SCM hasn't finished 
 
 ## Building
 
+### Windows
+
 ```powershell
 # Configure
-cmake -S F:\Coding\sensors-test\libhwsense -B F:\Coding\sensors-test\libhwsense\build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 
 # Build
-cmake --build F:\Coding\sensors-test\libhwsense\build --config Release
+cmake --build build --config Release
 
 # Run (as Administrator)
-F:\Coding\sensors-test\libhwsense\build\Release\read_cpu_temp.exe
+.\build\Release\read_cpu_temp.exe
 ```
+
+### Linux
+
+Only Intel CPU temperature is supported so far — the WinRing0, WMI, ADL, Super I/O and Embedded Controller backends are Windows-only.
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+
+sudo modprobe msr
+sudo ./build/read_cpu_temp
+```
+
+MSR access goes through `/dev/cpu/N/msr`, which needs the `msr` kernel module and root (or `CAP_SYS_RAWIO`). No kernel driver to install.
 
 ---
 
@@ -254,7 +270,8 @@ libhwsense/
 │   └── hwsense_unified.h      Unified API for easy cross-platform use
 ├── src/
 │   ├── core/
-│   │   ├── driver.c           WinRing0 driver lifecycle
+│   │   ├── driver.c           WinRing0 driver lifecycle (Windows)
+│   │   ├── driver_linux.c     /dev/cpu/N/msr lifecycle + dispatch (Linux)
 │   │   ├── api.c              Vendor dispatch (AMD/Intel)
 │   │   ├── wmi.c              WMI sensor queries
 │   │   ├── win_sysstats.c     System stats (memory, CPU, disk)
@@ -263,7 +280,8 @@ libhwsense/
 │   │   ├── amd_zen.c          AMD SMN/SVI2 temperature/voltage
 │   │   ├── amd_svi2.c         AMD SVI2 voltage reading
 │   │   ├── amd_smu.c          AMD SMU mailbox protocol
-│   │   ├── intel.c            Intel MSR temperature/power
+│   │   ├── intel.c            Intel MSR temperature/power (Windows)
+│   │   ├── intel_linux.c      Intel MSR temperature (Linux)
 │   │   └── cpu_diag.c         CPU feature detection
 │   ├── gpu/
 │   │   └── gpu.c              NVIDIA NVML + AMD ADL
@@ -273,11 +291,12 @@ libhwsense/
 │       ├── superio.c          Super I/O chip support
 │       └── ec.c               ASUS Embedded Controller
 ├── examples/
-│   ├── read_cpu_temp.c        Full sensor report CLI
+│   ├── read_cpu_temp.c        Full sensor report CLI (Windows)
+│   ├── read_cpu_temp_linux.c  CPU temperature CLI (Linux)
 │   ├── read_sensors.c         Simple unified API example
-│   └── read_homelab_sensors.c Linux sensor reader
+│   └── read_homelab_sensors.c Standalone Linux sensor reader
 ├── CMakeLists.txt             Builds hwsense.dll
-├── LICENSE                    MIT + BSD 2-Clause (WinRing0)
+├── LICENSE                    AGPL-3.0
 ├── USAGE.md                   Python/C#/Rust usage examples
 └── build/
     └── bin/Release/

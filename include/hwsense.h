@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+#ifdef _WIN32
 #include <windows.h>
 
 /* DLL Export/Import macros */
@@ -12,6 +13,9 @@ extern "C" {
 #define HWSENSE_API __declspec(dllexport)
 #else
 #define HWSENSE_API __declspec(dllimport)
+#endif
+#else
+#define HWSENSE_API
 #endif
 
 typedef struct {
@@ -167,10 +171,12 @@ HWSENSE_API hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx);
  */
 HWSENSE_API hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx);
 
+#ifdef _WIN32
 /*
  * Get the driver handle from context (for EC access).
  */
 HWSENSE_API HANDLE hwsense_get_driver_handle(hwsense_ctx_t *ctx);
+#endif
 
 /*
  * GPU temperature reading result.
@@ -227,12 +233,14 @@ HWSENSE_API int hwsense_nvme_temperature(void);
  */
 HWSENSE_API int hwsense_detect_vendor(void);
 
+#ifdef _WIN32
 /*
  * Intel RAPL power domains.
  */
 HWSENSE_API double hwsense_intel_pp0_power(HANDLE dev);
 HWSENSE_API double hwsense_intel_pp1_power(HANDLE dev);
 HWSENSE_API double hwsense_intel_dram_power(HANDLE dev);
+#endif
 
 /*
  * CPU diagnostic detection.
@@ -340,7 +348,9 @@ typedef struct {
     char error[256];
 } ec_result_t;
 
+#ifdef _WIN32
 HWSENSE_API ec_result_t ec_read_all_sensors(HANDLE dev);
+#endif
 
 #ifdef __cplusplus
 }
