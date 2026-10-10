@@ -34,12 +34,20 @@ else()
     set(HWSENSE_SOURCES
         src/core/driver_linux.c
         src/cpu/intel_linux.c
+        src/cpu/hwmon_linux.c
+        src/core/sensors_linux.c
+        src/core/unified_linux.c
+        src/gpu/gpu_linux.c
+        src/motherboard/ite_linux.c
         src/core/export.c
         src/core/alert.c
     )
 endif()
 
 add_library(hwsense SHARED ${HWSENSE_SOURCES})
+if(NOT WIN32)
+    target_link_libraries(hwsense PRIVATE ${CMAKE_DL_LIBS})
+endif()
 
 target_include_directories(hwsense
     PUBLIC
@@ -73,6 +81,10 @@ else()
     add_executable(read_cpu_temp examples/read_cpu_temp_linux.c)
 endif()
 target_link_libraries(read_cpu_temp PRIVATE hwsense)
+if(NOT WIN32)
+    add_executable(sensors_report examples/sensors_report_linux.c)
+    target_link_libraries(sensors_report PRIVATE hwsense)
+endif()
 
 # Tests: pure math and serialization, no hardware needed
 enable_testing()

@@ -249,17 +249,22 @@ cmake --build build --config Release
 
 ### Linux
 
-Only Intel CPU temperature is supported so far — the WinRing0, WMI, ADL, Super I/O and Embedded Controller backends are Windows-only.
+Supported on Linux, all without root (sysfs hwmon + NVML):
+
+- CPU temperature (AMD `k10temp`/`zenpower`, Intel `coretemp`; Intel MSR fallback needs root + `modprobe msr`)
+- CPU clock, load, memory, uptime, and the unified `hwsense_read_all()` / JSON / CSV export
+- NVIDIA GPU via NVML (loaded at runtime with `dlopen`), AMD GPU via `amdgpu` hwmon
+- NVMe temperature
+- Motherboard fans, temperatures and voltages, if a Super I/O kernel driver (`nct6775`, `it87`, ...) is loaded
+
+CPU voltage/power and the WinRing0, WMI, ADL, Super I/O and Embedded Controller backends remain Windows-only.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
-sudo modprobe msr
-sudo ./build/read_cpu_temp
+./build/sensors_report
 ```
-
-MSR access goes through `/dev/cpu/N/msr`, which needs the `msr` kernel module and root (or `CAP_SYS_RAWIO`). No kernel driver to install.
 
 ### Installing
 
