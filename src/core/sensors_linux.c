@@ -30,6 +30,7 @@ int hwsense_nvme_temperature(void)
 }
 
 extern int hwsense_ite_read_linux(hwsense_superio_result_t *r);
+extern int hwsense_nct_read_linux(hwsense_superio_result_t *r);
 
 /* Chips that are CPU/GPU/storage, not motherboard Super I/O. */
 static int is_non_board_chip(const char *name)
@@ -93,14 +94,22 @@ static hwsense_superio_result_t superio_scan(int want_temps, int want_fans,
 
     if (!(r.fan_count || r.count || r.voltage_count)) {
         /* No hwmon driver loaded: read the Super I/O chip directly. */
-        hwsense_superio_result_t d;
-        if (hwsense_ite_read_linux(&d)) {
+        hwsense_superio_result_t d, n;
+        memset(&n, 0, sizeof(n));
+        int ok = hwsense_ite_read_linux(&d);
+        if (!ok && hwsense_nct_read_linux(&n)) {
+            d = n;
+            ok = 1;
+        }
+        if (ok) {
             if (!want_fans)  { d.fan_count = 0; memset(d.fan_rpms, 0, sizeof(d.fan_rpms)); }
             if (!want_temps) { d.count = 0; memset(d.temperatures, 0, sizeof(d.temperatures)); }
             if (!want_volts) { d.voltage_count = 0; memset(d.voltages, 0, sizeof(d.voltages)); }
             return d;
         }
-        snprintf(r.error, sizeof(r.error), "%s", d.error);
+        /* Report the most specific failure: ITE found-but-failed beats "no chip". */
+        snprintf(r.error, sizeof(r.error), "%s",
+                 strncmp(d.error, "no supported ITE", 16) ? d.error : n.error);
     }
 
     r.ok = (want_fans && r.fan_count) || (want_temps && r.count) ||
