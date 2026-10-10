@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(libhwsense VERSION 0.4.0 LANGUAGES C)
+project(libhwsense VERSION 0.4.1 LANGUAGES C)
 
 if(WIN32)
     # Define HWSENSE_DLL_EXPORTS for DLL builds
@@ -49,6 +49,8 @@ endif()
 add_library(hwsense SHARED ${HWSENSE_SOURCES})
 if(NOT WIN32)
     target_link_libraries(hwsense PRIVATE ${CMAKE_DL_LIBS})
+    # Export only HWSENSE_API symbols; internal helpers stay private.
+    set_target_properties(hwsense PROPERTIES C_VISIBILITY_PRESET hidden)
 endif()
 
 target_include_directories(hwsense
@@ -170,6 +172,9 @@ install(FILES
 
 # pkg-config, for Linux consumers not using CMake
 if(NOT WIN32)
+    # Relative to the .pc file, so an extracted tarball works from any location.
+    file(RELATIVE_PATH HWSENSE_PC_PREFIX_REL
+         "/${CMAKE_INSTALL_LIBDIR}/pkgconfig" "/")
     configure_file(cmake/hwsense.pc.in
                    ${CMAKE_CURRENT_BINARY_DIR}/hwsense.pc @ONLY)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/hwsense.pc

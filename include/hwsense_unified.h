@@ -85,54 +85,54 @@ typedef struct {
  * Initialize the unified sensor API.
  * Returns context handle, or NULL on failure.
  */
-hwsense_ctx_t *hwsense_unified_init(void);
+HWSENSE_API hwsense_ctx_t *hwsense_unified_init(void);
 
 /*
  * Read all available sensors.
  * Fills the sensor_data structure with current values.
  */
-int hwsense_read_all(hwsense_ctx_t *ctx, hwsense_sensor_data_t *data);
+HWSENSE_API int hwsense_read_all(hwsense_ctx_t *ctx, hwsense_sensor_data_t *data);
 
 /*
  * Read CPU temperature.
  * Returns temperature in Celsius, or -1.0 on failure.
  */
-double hwsense_get_cpu_temp(hwsense_ctx_t *ctx);
+HWSENSE_API double hwsense_get_cpu_temp(hwsense_ctx_t *ctx);
 
 /*
  * Read CPU clock speed.
  * Returns clock in MHz, or -1 on failure.
  */
-int hwsense_get_cpu_clock(hwsense_ctx_t *ctx);
+HWSENSE_API int hwsense_get_cpu_clock(hwsense_ctx_t *ctx);
 
 /*
  * Read CPU voltage.
  * Returns voltage in volts, or -1.0 on failure.
  */
-double hwsense_get_cpu_voltage(hwsense_ctx_t *ctx);
+HWSENSE_API double hwsense_get_cpu_voltage(hwsense_ctx_t *ctx);
 
 /*
  * Read CPU package power.
  * Returns power in watts, or -1.0 on failure.
  */
-double hwsense_get_cpu_power(hwsense_ctx_t *ctx);
+HWSENSE_API double hwsense_get_cpu_power(hwsense_ctx_t *ctx);
 
 /*
  * Read CPU load.
  * Returns load percentage (0-100), or -1.0 on failure.
  */
-double hwsense_get_cpu_load(hwsense_ctx_t *ctx);
+HWSENSE_API double hwsense_get_cpu_load(hwsense_ctx_t *ctx);
 
 /*
  * Read memory usage.
  * Returns used memory in GB, or -1.0 on failure.
  */
-double hwsense_get_memory_used(hwsense_ctx_t *ctx);
+HWSENSE_API double hwsense_get_memory_used(hwsense_ctx_t *ctx);
 
 /*
  * Print formatted sensor report.
  */
-void hwsense_print_report(hwsense_ctx_t *ctx);
+HWSENSE_API void hwsense_print_report(hwsense_ctx_t *ctx);
 
 /* ── Threshold alerts ──────────────────────────────────────────────── */
 

@@ -14,6 +14,9 @@ extern "C" {
 #else
 #define HWSENSE_API __declspec(dllimport)
 #endif
+#elif defined(__GNUC__)
+/* The library is built with -fvisibility=hidden; only HWSENSE_API symbols are public. */
+#define HWSENSE_API __attribute__((visibility("default")))
 #else
 #define HWSENSE_API
 #endif
