@@ -1,7 +1,7 @@
 /*
  * driver_linux.c — Linux context lifecycle and vendor dispatch.
  *
- * No kernel driver to install: MSR access goes through /dev/cpu/N/msr,
+ * CPU temperature comes from hwmon sysfs first (no root). Fallback: MSR access goes through /dev/cpu/N/msr,
  * which requires CAP_SYS_RAWIO (typically root) and the `msr` kernel
  * module loaded (`modprobe msr`).
  *
@@ -21,6 +21,7 @@
 #include <errno.h>
 
 extern hwsense_temp_result_t hwsense_intel_core_temp_linux(void);
+extern hwsense_temp_result_t hwsense_hwmon_cpu_temp_linux(void);
 
 /*
  * Detect CPU vendor from /proc/cpuinfo.
@@ -54,17 +55,6 @@ int hwsense_detect_vendor(void)
 hwsense_ctx_t *hwsense_init(void)
 {
     hwsense_ctx_t *ctx;
-    int fd;
-
-    fd = open("/dev/cpu/0/msr", O_RDONLY);
-    if (fd < 0) {
-        fprintf(stderr,
-                "ERROR: cannot open /dev/cpu/0/msr (%s).\n"
-                "Run as root (or grant CAP_SYS_RAWIO) and `modprobe msr` first.\n",
-                strerror(errno));
-        return NULL;
-    }
-    close(fd);
 
     ctx = (hwsense_ctx_t *)calloc(1, sizeof(*ctx));
     if (!ctx)
@@ -88,13 +78,16 @@ hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)
         return r;
     }
 
+    /* hwmon needs no privileges and covers AMD and Intel; try it first,
+     * then fall back to raw MSR reads (Intel only, needs root + msr module). */
+    r = hwsense_hwmon_cpu_temp_linux();
+    if (r.ok)
+        return r;
+
     if (ctx->vendor == 'I')
         return hwsense_intel_core_temp_linux();
 
-    snprintf(r.error, sizeof(r.error),
-             ctx->vendor == 'A'
-                 ? "AMD temperature reading is not implemented on Linux yet"
-                 : "Unknown or unsupported CPU vendor");
+    /* r.error already explains the hwmon failure */
     return r;
 }
 

@@ -1,7 +1,7 @@
 /*
  * read_cpu_temp_linux.c - Reads CPU temperature via libhwsense on Linux.
  *
- * Requires root (or CAP_SYS_RAWIO) and the msr kernel module:
+ * Needs no root on most systems (hwmon). Intel MSR fallback needs root + msr module:
  *   sudo modprobe msr
  *   sudo ./read_cpu_temp
  */
