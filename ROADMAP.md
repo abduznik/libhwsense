@@ -33,7 +33,7 @@ CPU temperature/voltage/frequency/power (Intel MSR + AMD SMN/SVI2), GPU via NVML
 
 **Unverified Zen4/Zen5 SMU offsets.** The Raphael, Phoenix, Granite Ridge and Rembrandt entries are transcribed from LibreHardwareMonitor and SMUDebugTool, not confirmed on real silicon. A wrong mailbox address returns plausible-looking garbage rather than failing, so suspect these offsets first if a reading looks wrong on one of those parts.
 
-**Linux support is Intel temperature only.** The WinRing0, WMI, ADL, Super I/O and Embedded Controller backends are Windows-only. The Linux path also has not been validated against `lm-sensors` on real hardware yet — CI confirms it compiles, links and fails cleanly without MSR access, nothing more.
+**Linux covers temperatures and system stats, not voltage or power.** Linux reads CPU temperature (AMD and Intel, via hwmon), clock, load, memory, GPU (NVML, `amdgpu`), NVMe temperature and Super I/O fans/temps/voltages (hwmon, or a direct ITE reader over `/dev/port`). CPU voltage and package power are still Windows-only on AMD (SMN/SVI2), as are the WMI, ADL and Embedded Controller backends. Verified on one machine only (Ryzen 5 4500, RTX 4060 Ti, ITE IT8655E); the Intel path, `amdgpu`, and the IT8665E/IT8686E direct reader are untested on real hardware, and Nuvoton Super I/O chips have no direct reader on Linux (they need a hwmon driver such as `nct6775`).
 
 **`HANDLE` in the public API.** `hwsense.h` still exposes Win32 types on a few entry points, guarded by `#ifdef _WIN32`. Decoupling these is a prerequisite for Linux being a first-class target.
 
@@ -41,8 +41,8 @@ CPU temperature/voltage/frequency/power (Intel MSR + AMD SMN/SVI2), GPU via NVML
 
 ## v0.4.0 (Next)
 
-- **Verify the Linux path on real hardware** against `lm-sensors` (#37)
-- **AMD on Linux** — SMN/SVI2 via `/dev/cpu/N/msr` and PCI config (#38)
+- **Verify the Linux path on more hardware** — Intel, `amdgpu`, IT8665E/IT8686E — and against `lm-sensors` (#37)
+- **AMD on Linux** — temperature is done via hwmon; voltage and power (SMN/SVI2 via `/dev/cpu/N/msr` and PCI config) remain (#38)
 - **OS abstraction layer** so vendor code stops carrying `#ifdef`s (#39)
 - **Replace or augment WinRing0** (#44) — it is unmaintained, flagged by AV/EDR, and blocked by driver signature enforcement, which is a real adoption blocker
 - Verify the Zen4/Zen5 SMU offsets on real parts
