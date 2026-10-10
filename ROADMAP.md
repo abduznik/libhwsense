@@ -1,6 +1,24 @@
 # libhwsense Roadmap
 
-## v0.3.0 (Current Release)
+## v0.4.0 (Current Release)
+
+### Added
+
+| Feature | Notes |
+|---------|-------|
+| Linux sensors, mostly without root | CPU temperature via hwmon (AMD `k10temp`/`zenpower`, Intel `coretemp`; Intel MSR fallback), CPU clock/load, memory, uptime, GPU (NVML via `dlopen`, `amdgpu` hwmon), NVMe temperature |
+| Unified API on Linux | `hwsense_read_all`, `hwsense_print_report` and JSON/CSV export now work on Linux |
+| NVMe SMART | `hwsense_nvme_smart()` — wear, TB read/written, power-on hours, unsafe shutdowns, media errors. Needs root or `CAP_SYS_ADMIN`. Checked against `smartctl` |
+| Super I/O fans, temps and voltages on Linux | From a loaded hwmon driver, or read directly over `/dev/port` (needs `CAP_SYS_RAWIO`) when none is loaded. Direct readers: ITE IT8655E/IT8665E/IT8686E and Nuvoton NCT6779/NCT6791-NCT6799 |
+| `sensors_report` example | Prints every sensor available on the machine |
+
+### Verification status
+
+Verified on a Ryzen 5 4500 / RTX 4060 Ti / ITE IT8655E machine only. The Nuvoton direct reader is covered by simulated-register tests but has **not** been run on a real chip; Intel, `amdgpu` and IT8665E/IT8686E are likewise untested. See Known Gaps.
+
+---
+
+## v0.3.0
 
 ### Added
 
@@ -39,7 +57,7 @@ CPU temperature/voltage/frequency/power (Intel MSR + AMD SMN/SVI2), GPU via NVML
 
 ---
 
-## v0.4.0 (Next)
+## v0.5.0 (Next)
 
 - **Verify the Linux path on more hardware** — Intel, `amdgpu`, IT8665E/IT8686E — and against `lm-sensors` (#37)
 - **AMD on Linux** — temperature is done via hwmon; voltage and power (SMN/SVI2 via `/dev/cpu/N/msr` and PCI config) remain (#38)
