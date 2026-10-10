@@ -1,15 +1,21 @@
 /*
  * superio.c — Super I/O chip detection, temperature, and fan speed reading.
  *
- * Supports Nuvoton NCT6791D/93D/95D/96D/97D/98D/99D, ITE IT8628E/IT8688E/IT8728F,
- * Winbond W83627DHG, and Fintek F71882/F71889 chips.
+ * Supports Nuvoton NCT6791D/93D/95D/96D/97D/98D/99D, ITE IT8655E/IT8665E/
+ * IT8686E/IT8628E/IT8688E/IT8689E/IT8728F, Winbond W83627DHG, and Fintek
+ * F71882/F71889 chips.
  *
- * Accesses registers via IO ports 0x2E/0x2F or 0x4E/0x4F.
+ * Config space is reached via IO ports 0x2E/0x2F or 0x4E/0x4F. ITE chips are
+ * unlocked with 0x87,0x01,0x55,0x55 (0xAA last on 0x4E) and their sensors are
+ * read through the hardware monitor's own base address (LDN 4, base+5/base+6);
+ * the register decoding is shared with the Linux reader in ite_decode.c.
  */
 
 #include "../core/hwsense_internal.h"
 #include "../core/ioctl_codes.h"
+#include "ite_decode.h"
 #include <stdio.h>
+#include <string.h>
 
 /* Super I/O standard IO ports */
 #define SIO_ADDR_PORT   0x2E
@@ -48,13 +54,6 @@ static const sio_chip_info_t known_chips[] = {
     { 0xD42B, SIO_CHIP_NUVOTON, "NCT6798D" },
     { 0xD802, SIO_CHIP_NUVOTON, "NCT6799D" },
     { 0xD806, SIO_CHIP_NUVOTON, "NCT6701D" },
-    /* ITE */
-    { 0x8628, SIO_CHIP_ITE, "IT8628E" },
-    { 0x8688, SIO_CHIP_ITE, "IT8688E" },
-    { 0x8689, SIO_CHIP_ITE, "IT8689E" },
-    { 0x8728, SIO_CHIP_ITE, "IT8728F" },
-    { 0x8790, SIO_CHIP_ITE, "IT8790E" },
-    { 0x8733, SIO_CHIP_ITE, "IT8792E" },
     /* Winbond */
     { 0xA020, SIO_CHIP_WINBOND, "W83627DHG" },
     { 0xB070, SIO_CHIP_WINBOND, "W83627DHG-P" },
@@ -78,18 +77,6 @@ static const WORD nct679x_voltage_regs[] = {
 static const WORD nct679x_temp_regs[] = { 0x073, 0x075, 0x077, 0x079, 0x07B, 0x07D, 0x4A0, 0x4A2 };
 static const WORD nct679x_temp_half[] = { 0x074, 0x076, 0x078, 0x07A, 0x07C, 0x07E, 0x49E, 0x4A1 };
 static const BYTE nct679x_temp_bits[] = { 7, 7, 7, 7, 7, 7, 6, 7 };
-
-/* ITE temperature registers */
-static const BYTE ite_temp_regs[] = { 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E };
-
-/* ITE fan tachometer registers (low, high) */
-static const BYTE ite_fan_regs[][2] = {
-    { 0x0D, 0x18 }, { 0x0E, 0x19 }, { 0x0F, 0x1A },
-    { 0x80, 0x81 }, { 0x82, 0x83 }, { 0x4C, 0x4D }
-};
-
-/* ITE voltage registers */
-static const BYTE ite_voltage_regs[] = { 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2F };
 
 /* Read/Write IO port via WinRing0 */
 static BOOL sio_read_port(HANDLE dev, DWORD port, BYTE *out_value)
@@ -116,6 +103,14 @@ static BOOL sio_read_port(HANDLE dev, DWORD port, BYTE *out_value)
  * Security validation for IO port write.
  * Returns TRUE if the port is safe to write to.
  */
+/*
+ * Monitor index/data ports of an ITE chip found during this call. Writes are
+ * allowed to exactly these two ports and only while ite_probe_and_read is
+ * running (thread-local, cleared on exit).
+ */
+static __declspec(thread) DWORD sio_ec_index_port = 0;
+static __declspec(thread) DWORD sio_ec_data_port = 0;
+
 static BOOL sio_validate_write_port(DWORD port)
 {
     /* Block writes to dangerous ports (DMA, PIC, timer, etc.) */
@@ -135,6 +130,11 @@ static BOOL sio_validate_write_port(DWORD port)
         fprintf(stderr, "SECURITY: Blocked write to CMOS port 0x%03X\n", port);
         return FALSE;
     }
+
+    /* Allow the discovered ITE monitor index/data ports (validated in ite_probe_and_read) */
+    if (sio_ec_index_port != 0 &&
+        (port == sio_ec_index_port || port == sio_ec_data_port))
+        return TRUE;
 
     /* Only allow writes to known Super I/O port ranges */
     if (port != 0x2E && port != 0x2F && port != 0x4E && port != 0x4F) {
@@ -305,56 +305,145 @@ static int nct679x_read_voltage(HANDLE dev, DWORD addr_port, DWORD data_port, in
 }
 
 /*
- * Read temperature from ITE chip.
+ * ITE chips are unlocked with a different key than Nuvoton/Winbond/Fintek:
+ * 0x87, 0x01, 0x55, then 0x55 (or 0xAA when the index port is 0x4E).
  */
-static int ite_read_temp(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+static BOOL ite_enter(HANDLE dev, DWORD addr_port)
 {
-    if (channel < 0 || channel >= 6)
+    return sio_write_port(dev, addr_port, 0x87) &&
+           sio_write_port(dev, addr_port, 0x01) &&
+           sio_write_port(dev, addr_port, 0x55) &&
+           sio_write_port(dev, addr_port, addr_port == 0x4E ? 0xAA : 0x55);
+}
+
+/* Leave ITE config mode: config control register 0x02, bit 1. */
+static void ite_exit(HANDLE dev, DWORD addr_port, DWORD data_port)
+{
+    sio_write_reg(dev, addr_port, data_port, 0x02, 0x02);
+}
+
+typedef struct {
+    HANDLE dev;
+    DWORD base;
+} ite_win_t;
+
+static int ite_win_read(void *ctx, unsigned reg)
+{
+    ite_win_t *w = (ite_win_t *)ctx;
+    BYTE v = 0;
+
+    if (!sio_write_port(w->dev, w->base + ITE_EC_INDEX_OFF, (BYTE)reg))
         return -1;
-
-    BYTE val = 0;
-    sio_read_reg(dev, addr_port, data_port, ite_temp_regs[channel], &val);
-
-    int temp = (int)(signed char)val;
-
-    if (temp < -40 || temp > 150)
+    if (!sio_read_port(w->dev, w->base + ITE_EC_DATA_OFF, &v))
         return -1;
+    return v;
+}
 
-    return temp;
+static void ite_win_write(void *ctx, unsigned reg, int val)
+{
+    ite_win_t *w = (ite_win_t *)ctx;
+
+    if (sio_write_port(w->dev, w->base + ITE_EC_INDEX_OFF, (BYTE)reg))
+        sio_write_port(w->dev, w->base + ITE_EC_DATA_OFF, (BYTE)val);
 }
 
 /*
- * Read fan RPM from ITE chip.
+ * A plausible monitor base: above the legacy ISA range, 8-byte aligned, and
+ * clear of the PCI config ports (0xCF8-0xCFF) that the index/data ports must
+ * never alias.
  */
-static int ite_read_fan(HANDLE dev, DWORD addr_port, DWORD data_port, int fan_num)
+static BOOL ite_base_ok(DWORD base)
 {
-    if (fan_num < 0 || fan_num >= 6)
-        return -1;
-
-    BYTE low = 0, high = 0;
-    sio_read_reg(dev, addr_port, data_port, ite_fan_regs[fan_num][0], &low);
-    sio_read_reg(dev, addr_port, data_port, ite_fan_regs[fan_num][1], &high);
-
-    int count = (high << 8) | low;
-
-    if (count == 0 || count == 0xFFFF)
-        return 0;
-
-    return 1350000 / (count * 2);
+    if (base < 0x100 || base > 0xFFF8 || (base & 7))
+        return FALSE;
+    if (base + ITE_EC_INDEX_OFF <= 0xCFF && base + ITE_EC_DATA_OFF >= 0xCF8)
+        return FALSE;
+    return TRUE;
 }
 
 /*
- * Read voltage from ITE chip.
+ * Look for an ITE chip behind addr_port/data_port and, if present, read all
+ * its sensors into *out. Returns TRUE if an ITE chip was found (even if it
+ * then returned nothing; out->error says why), FALSE if there is no ITE
+ * chip here and the caller should try the other chip families.
  */
-static int ite_read_voltage(HANDLE dev, DWORD addr_port, DWORD data_port, int channel)
+static BOOL ite_probe_and_read(HANDLE dev, DWORD addr_port, DWORD data_port,
+                               hwsense_superio_result_t *out)
 {
-    if (channel < 0 || channel >= 10)
-        return -1;
+    BYTE id_hi = 0, id_lo = 0, active = 0, base_hi = 0, base_lo = 0;
+    WORD id;
+    DWORD base;
+    ite_win_t w;
 
-    BYTE val = 0;
-    sio_read_reg(dev, addr_port, data_port, ite_voltage_regs[channel], &val);
+    memset(out, 0, sizeof(*out));
 
-    return (int)(val * 16);  /* 16 mV per step (typical) */
+    /* ITE chips only answer on the two standard config ports. */
+    if (addr_port != 0x2E && addr_port != 0x4E)
+        return FALSE;
+    if (!ite_enter(dev, addr_port))
+        return FALSE;
+
+    sio_read_reg(dev, addr_port, data_port, ITE_CFG_DEVID, &id_hi);
+    sio_read_reg(dev, addr_port, data_port, ITE_CFG_DEVID + 1, &id_lo);
+    id = ((WORD)id_hi << 8) | id_lo;
+
+    if (!hwsense_ite_chip_name(id)) {
+        ite_exit(dev, addr_port, data_port);
+        return FALSE;
+    }
+
+    sio_write_reg(dev, addr_port, data_port, ITE_CFG_LDN, ITE_LDN_EC);
+    sio_read_reg(dev, addr_port, data_port, ITE_CFG_ACTIVE, &active);
+    sio_read_reg(dev, addr_port, data_port, ITE_CFG_BASE, &base_hi);
+    sio_read_reg(dev, addr_port, data_port, ITE_CFG_BASE + 1, &base_lo);
+    ite_exit(dev, addr_port, data_port);
+
+    base = (((DWORD)base_hi << 8) | base_lo) & ~7u;
+    _snprintf_s(out->chip_name, sizeof(out->chip_name), _TRUNCATE, "%s",
+                hwsense_ite_chip_name(id));
+    out->chip_id = id;
+
+    if (!(active & 1) || !ite_base_ok(base)) {
+        _snprintf_s(out->error, sizeof(out->error), _TRUNCATE,
+                    "ITE %s hardware monitor is disabled or has an invalid base address (0x%X)",
+                    out->chip_name, base);
+        return TRUE;
+    }
+
+    w.dev = dev;
+    w.base = base;
+    sio_ec_index_port = base + ITE_EC_INDEX_OFF;
+    sio_ec_data_port = base + ITE_EC_DATA_OFF;
+    hwsense_ite_decode(id, ite_win_read, ite_win_write, &w, out);
+    sio_ec_index_port = 0;
+    sio_ec_data_port = 0;
+    return TRUE;
+}
+
+/* Keep only the requested kind of reading from a full ITE result. */
+static hwsense_superio_result_t ite_filter(const hwsense_superio_result_t *src,
+                                           int temps, int fans, int volts)
+{
+    hwsense_superio_result_t r = *src;
+
+    if (!temps) {
+        r.count = 0;
+        memset(r.temperatures, 0, sizeof(r.temperatures));
+    }
+    if (!fans) {
+        r.fan_count = 0;
+        memset(r.fan_rpms, 0, sizeof(r.fan_rpms));
+    }
+    if (!volts) {
+        r.voltage_count = 0;
+        memset(r.voltages, 0, sizeof(r.voltages));
+    }
+
+    r.ok = (temps && r.count) || (fans && r.fan_count) || (volts && r.voltage_count);
+    if (!r.ok && !r.error[0])
+        _snprintf_s(r.error, sizeof(r.error), _TRUNCATE,
+                    "No valid readings from %s", r.chip_name);
+    return r;
 }
 
 /*
@@ -389,6 +478,10 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
         DWORD data_port = port_pairs[p][1];
 
         /* Try to detect chip */
+        hwsense_superio_result_t ite;
+        if (ite_probe_and_read(dev, addr_port, data_port, &ite))
+            return ite_filter(&ite, 1, 0, 0);
+
         sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
         if (chip.type != SIO_CHIP_UNKNOWN) {
@@ -414,17 +507,6 @@ hwsense_superio_result_t hwsense_superio_temps(hwsense_ctx_t *ctx)
                 max_temps = 8;
                 for (i = 0; i < max_temps && result.count < HWSENSE_MAX_SUPERIO_TEMPS; i++) {
                     int temp = nct679x_read_temp(dev, addr_port, data_port, i);
-                    if (temp > 0) {
-                        result.temperatures[result.count] = temp;
-                        result.count++;
-                    }
-                }
-                break;
-
-            case SIO_CHIP_ITE:
-                max_temps = 6;
-                for (i = 0; i < max_temps && result.count < HWSENSE_MAX_SUPERIO_TEMPS; i++) {
-                    int temp = ite_read_temp(dev, addr_port, data_port, i);
                     if (temp > 0) {
                         result.temperatures[result.count] = temp;
                         result.count++;
@@ -482,6 +564,10 @@ hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx)
         DWORD addr_port = port_pairs[p][0];
         DWORD data_port = port_pairs[p][1];
 
+        hwsense_superio_result_t ite;
+        if (ite_probe_and_read(dev, addr_port, data_port, &ite))
+            return ite_filter(&ite, 0, 1, 0);
+
         sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
         if (chip.type != SIO_CHIP_UNKNOWN) {
@@ -507,18 +593,6 @@ hwsense_superio_result_t hwsense_superio_fans(hwsense_ctx_t *ctx)
                 for (i = 0; i < max_fans && result.fan_count < HWSENSE_MAX_SUPERIO_FANS; i++) {
                     int rpm = nct679x_read_fan(dev, addr_port, data_port, i);
                     if (rpm >= 0) {
-                        result.fan_rpms[result.fan_count] = rpm;
-                        result.fan_count++;
-                        result.count++;
-                    }
-                }
-                break;
-
-            case SIO_CHIP_ITE:
-                max_fans = 6;
-                for (i = 0; i < max_fans && result.fan_count < HWSENSE_MAX_SUPERIO_FANS; i++) {
-                    int rpm = ite_read_fan(dev, addr_port, data_port, i);
-                    if (rpm > 0) {
                         result.fan_rpms[result.fan_count] = rpm;
                         result.fan_count++;
                         result.count++;
@@ -575,6 +649,10 @@ hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx)
         DWORD addr_port = port_pairs[p][0];
         DWORD data_port = port_pairs[p][1];
 
+        hwsense_superio_result_t ite;
+        if (ite_probe_and_read(dev, addr_port, data_port, &ite))
+            return ite_filter(&ite, 0, 0, 1);
+
         sio_chip_info_t chip = sio_detect_chip(dev, addr_port, data_port);
 
         if (chip.type != SIO_CHIP_UNKNOWN) {
@@ -599,18 +677,6 @@ hwsense_superio_result_t hwsense_superio_voltages(hwsense_ctx_t *ctx)
                 max_volts = 16;
                 for (i = 0; i < max_volts && result.voltage_count < HWSENSE_MAX_SUPERIO_VOLTAGES; i++) {
                     int mv = nct679x_read_voltage(dev, addr_port, data_port, i);
-                    if (mv > 0) {
-                        result.voltages[result.voltage_count] = mv / 1000.0;
-                        result.voltage_count++;
-                        result.count++;
-                    }
-                }
-                break;
-
-            case SIO_CHIP_ITE:
-                max_volts = 10;
-                for (i = 0; i < max_volts && result.voltage_count < HWSENSE_MAX_SUPERIO_VOLTAGES; i++) {
-                    int mv = ite_read_voltage(dev, addr_port, data_port, i);
                     if (mv > 0) {
                         result.voltages[result.voltage_count] = mv / 1000.0;
                         result.voltage_count++;
