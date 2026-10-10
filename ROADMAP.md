@@ -1,6 +1,16 @@
 # libhwsense Roadmap
 
-## v0.4.0 (Current Release)
+## v0.4.1 (Current Release)
+
+Packaging fixes for v0.4.0:
+
+- `hwsense_unified.h` functions (`hwsense_read_all`, `hwsense_print_report`, `hwsense_get_*`) are now `HWSENSE_API`, so the **Windows DLL exports the unified API**. It was missing from the v0.4.0 DLL.
+- The Linux library is built with hidden visibility, so internal helpers (`hwsense_ite_read_linux`, `hwsense_nct_decode`, ...) are no longer exported.
+- The installed `hwsense.pc` is relocatable (`${pcfiledir}`) instead of hardcoding `/usr/local`, so the release tarball works from any directory.
+
+---
+
+## v0.4.0
 
 ### Added
 

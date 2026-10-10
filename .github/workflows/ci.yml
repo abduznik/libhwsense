@@ -88,6 +88,19 @@ jobs:
       run: |
         export PKG_CONFIG_PATH="$PWD/_prefix/lib/pkgconfig"
         pkg-config --exists hwsense
-        test "$(pkg-config --modversion hwsense)" = "0.4.0"
+        test "$(pkg-config --modversion hwsense)" = "0.4.1"
         echo "cflags: $(pkg-config --cflags hwsense)"
         echo "libs:   $(pkg-config --libs hwsense)"
+
+    - name: Check install tree is relocatable and exports only the public API
+      run: |
+        mv _prefix _moved
+        export PKG_CONFIG_PATH="$PWD/_moved/lib/pkgconfig"
+        test -f "$(pkg-config --variable=includedir hwsense)/hwsense.h"
+        # Internal helpers must not leak out of the shared library.
+        if nm -D --defined-only _moved/lib/libhwsense.so | grep -E ' (hwsense_(ite|nct)_|hwsense_amdgpu_)'; then
+          echo "internal symbols leaked from libhwsense.so"
+          exit 1
+        fi
+        # The unified API must be exported.
+        nm -D --defined-only _moved/lib/libhwsense.so | grep -q ' hwsense_read_all$'
