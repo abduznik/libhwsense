@@ -275,7 +275,7 @@ cmake --install build --prefix /usr/local
 Consumers using CMake can then link against the imported target:
 
 ```cmake
-find_package(hwsense 0.3 REQUIRED)
+find_package(hwsense 0.4 REQUIRED)
 target_link_libraries(myapp PRIVATE hwsense::hwsense)
 ```
 

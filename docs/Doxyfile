@@ -9,7 +9,7 @@
 
 PROJECT_NAME           = libhwsense
 PROJECT_BRIEF          = "Hardware sensor reading library for Windows and Linux"
-PROJECT_NUMBER         = 0.3.0
+PROJECT_NUMBER         = 0.4.0
 
 OUTPUT_DIRECTORY       = docs
 HTML_OUTPUT            = html

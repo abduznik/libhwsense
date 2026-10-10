@@ -76,7 +76,7 @@ jobs:
         cat > _consumer/CMakeLists.txt <<'EOF'
         cmake_minimum_required(VERSION 3.15)
         project(consumer C)
-        find_package(hwsense 0.3 REQUIRED)
+        find_package(hwsense 0.4 REQUIRED)
         add_executable(consumer main.c)
         target_link_libraries(consumer PRIVATE hwsense::hwsense)
         EOF
@@ -88,6 +88,6 @@ jobs:
       run: |
         export PKG_CONFIG_PATH="$PWD/_prefix/lib/pkgconfig"
         pkg-config --exists hwsense
-        test "$(pkg-config --modversion hwsense)" = "0.3.0"
+        test "$(pkg-config --modversion hwsense)" = "0.4.0"
         echo "cflags: $(pkg-config --cflags hwsense)"
         echo "libs:   $(pkg-config --libs hwsense)"
