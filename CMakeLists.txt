@@ -39,6 +39,8 @@ else()
         src/core/unified_linux.c
         src/gpu/gpu_linux.c
         src/motherboard/ite_linux.c
+        src/motherboard/nct_linux.c
+        src/storage/nvme_linux.c
         src/core/export.c
         src/core/alert.c
     )
@@ -102,6 +104,19 @@ add_test(NAME sensor_math COMMAND test_sensor_math)
 add_executable(test_export tests/test_export.c src/core/export.c)
 target_include_directories(test_export PRIVATE src include)
 add_test(NAME export COMMAND test_export)
+
+if(NOT WIN32)
+    # Decode logic only; no hardware or privileges needed.
+    add_executable(test_nct tests/test_nct.c src/motherboard/nct_linux.c)
+    target_include_directories(test_nct PRIVATE src include)
+    target_link_libraries(test_nct PRIVATE m)
+    add_test(NAME nct COMMAND test_nct)
+
+    add_executable(test_nvme tests/test_nvme.c src/storage/nvme_linux.c)
+    target_include_directories(test_nvme PRIVATE src include)
+    target_link_libraries(test_nvme PRIVATE m)
+    add_test(NAME nvme COMMAND test_nvme)
+endif()
 
 # HWSENSE_ALERT_LOGIC_ONLY drops the one function that reads a live
 # sensor, leaving the threshold logic the tests actually cover.

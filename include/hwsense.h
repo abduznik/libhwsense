@@ -225,6 +225,46 @@ HWSENSE_API hwsense_gpu_info_t hwsense_gpu_info(int gpu_index);
  */
 HWSENSE_API int hwsense_nvme_temperature(void);
 
+#ifndef _WIN32
+/*
+ * NVMe SMART / Health Information log (Linux).
+ * Counters are the raw values from the drive; data_units_* are in units of
+ * 512,000 bytes as defined by the NVMe specification. Temperatures are
+ * converted from Kelvin; a sensor the drive does not implement is left at 0
+ * and not counted in sensor_count.
+ */
+typedef struct {
+    int    ok;
+    int    critical_warning;          /* bitmask, 0 = healthy */
+    double composite_celsius;
+    int    sensor_count;              /* number of valid entries in sensor_celsius */
+    double sensor_celsius[8];
+    int    available_spare_pct;
+    int    available_spare_threshold_pct;
+    int    percentage_used;           /* endurance used, may exceed 100 */
+    unsigned long long data_units_read;
+    unsigned long long data_units_written;
+    unsigned long long host_read_commands;
+    unsigned long long host_write_commands;
+    unsigned long long controller_busy_minutes;
+    unsigned long long power_cycles;
+    unsigned long long power_on_hours;
+    unsigned long long unsafe_shutdowns;
+    unsigned long long media_errors;
+    unsigned long long error_log_entries;
+    unsigned int warning_temp_minutes;   /* time above warning threshold */
+    unsigned int critical_temp_minutes;  /* time above critical threshold */
+    char   error[256];
+} hwsense_nvme_smart_t;
+
+/*
+ * Read the SMART log of /dev/nvme<index>. Needs root (or CAP_SYS_ADMIN and
+ * read access to the device node); for an unprivileged temperature use
+ * hwsense_nvme_temperature().
+ */
+HWSENSE_API int hwsense_nvme_smart(int index, hwsense_nvme_smart_t *out);
+#endif
+
 /* ── Extended API (for advanced users) ──────────────────────────────── */
 
 /*

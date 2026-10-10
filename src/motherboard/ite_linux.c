@@ -29,11 +29,7 @@
 #ifndef _WIN32
 
 #include "../core/hwsense_internal.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#include "portio_linux.h"
 
 #define ITE_CFG_DEVID    0x20
 #define ITE_CFG_LDN      0x07
@@ -65,18 +61,8 @@ static const unsigned char ite_vin[]    = { 0x20, 0x21, 0x22, 0x23, 0x24,
 /* in7 = VSB, in8 = Vbat, in9 = AVCC3: divided on-chip, so the ADC LSB doubles. */
 #define ITE_VIN_SCALED_MASK ((1 << 7) | (1 << 8) | (1 << 9))
 
-static int port_fd = -1;
-
-static int outb_port(unsigned port, unsigned char v)
-{
-    return pwrite(port_fd, &v, 1, port) == 1;
-}
-
-static int inb_port(unsigned port)
-{
-    unsigned char v;
-    return pread(port_fd, &v, 1, port) == 1 ? v : -1;
-}
+#define outb_port hwsense_outb
+#define inb_port  hwsense_inb
 
 static int cfg_read(unsigned ioreg, int reg)
 {
@@ -148,14 +134,8 @@ int hwsense_ite_read_linux(hwsense_superio_result_t *r)
 
     memset(r, 0, sizeof(*r));
 
-    port_fd = open("/dev/port", O_RDWR);
-    if (port_fd < 0) {
-        snprintf(r->error, sizeof(r->error),
-                 "cannot open /dev/port (%s): direct Super I/O access needs "
-                 "CAP_SYS_RAWIO, e.g. run as root or setcap cap_sys_rawio+ep",
-                 strerror(errno));
+    if (!hwsense_port_open(r->error, sizeof(r->error)))
         return 0;
-    }
 
     if (!ite_find(&chip, &base)) {
         snprintf(r->error, sizeof(r->error),
@@ -216,13 +196,11 @@ int hwsense_ite_read_linux(hwsense_superio_result_t *r)
     r->ok = r->count || r->fan_count || r->voltage_count;
     if (!r->ok)
         snprintf(r->error, sizeof(r->error), "ITE chip %s returned no readings", chip->name);
-    close(port_fd);
-    port_fd = -1;
+    hwsense_port_close();
     return r->ok;
 
 fail:
-    close(port_fd);
-    port_fd = -1;
+    hwsense_port_close();
     return 0;
 }
 

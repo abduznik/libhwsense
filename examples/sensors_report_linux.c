@@ -42,6 +42,23 @@ int main(void)
     if (!hwsense_superio_fans(ctx).ok)
         printf("\nFans: %s\n", hwsense_superio_fans(ctx).error);
 
+    {
+        hwsense_nvme_smart_t n;
+        if (hwsense_nvme_smart(0, &n)) {
+            printf("\n--- NVMe SMART (nvme0) ---\n"
+                   "  Composite %.1f C, %d extra sensor(s), critical warning 0x%02x\n"
+                   "  Spare %d%% (threshold %d%%), %d%% used\n"
+                   "  Written %.2f TB, read %.2f TB\n"
+                   "  %llu power cycles, %llu hours, %llu unsafe shutdowns, %llu media errors\n",
+                   n.composite_celsius, n.sensor_count, n.critical_warning,
+                   n.available_spare_pct, n.available_spare_threshold_pct, n.percentage_used,
+                   n.data_units_written * 512000.0 / 1e12, n.data_units_read * 512000.0 / 1e12,
+                   n.power_cycles, n.power_on_hours, n.unsafe_shutdowns, n.media_errors);
+        } else {
+            printf("\nNVMe SMART: %s\n", n.error);
+        }
+    }
+
     hwsense_shutdown(ctx);
     return 0;
 }
