@@ -1,6 +1,15 @@
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601   /* GetIfTable2 needs Vista or newer */
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winioctl.h>
+/* ws2ipdef.h defines _WS2IPDEF_, which netioapi.h needs before MIB_IF_ROW2.
+   WIN32_LEAN_AND_MEAN keeps the old winsock.h out, so this is safe. */
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <iphlpapi.h>
+#include <netioapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -114,6 +123,51 @@ int win_get_disk_io(win_disk_io_t *disks, int max_disks)
         }
         CloseHandle(hDev);
     }
+    return count;
+}
+
+/*
+ * MIB_IF_ROW2 carries the adapter name as UTF-16. Convert to UTF-8 here so
+ * callers do not have to care; fall back to the interface index if both the
+ * alias and the description are empty.
+ */
+static void net_row_name(const MIB_IF_ROW2 *row, char *out, int out_size)
+{
+    const WCHAR *src = row->Alias[0] ? row->Alias : row->Description;
+
+    if (WideCharToMultiByte(CP_UTF8, 0, src, -1, out, out_size, NULL, NULL) <= 0)
+        snprintf(out, (size_t)out_size, "adapter%lu", (unsigned long)row->InterfaceIndex);
+}
+
+int win_get_net_io(win_net_io_t *nets, int max_nets)
+{
+    MIB_IF_TABLE2 *table = NULL;
+    int count = 0;
+
+    if (!nets || max_nets <= 0) return 0;
+    if (GetIfTable2(&table) != NO_ERROR || !table) return 0;
+
+    for (ULONG i = 0; i < table->NumEntries && count < max_nets; i++) {
+        const MIB_IF_ROW2 *row = &table->Table[i];
+        win_net_io_t *out = &nets[count];
+
+        /* Loopback has no useful throughput; the counters just mirror traffic.
+           Filter interfaces (WFP, QoS, ...) mirror their parent's counters, so
+           reporting them would double-count every byte. */
+        if (row->Type == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        if (row->InterfaceAndOperStatusFlags.FilterInterface) continue;
+
+        net_row_name(row, out->name, (int)sizeof(out->name));
+        out->rx_bytes = (long long)row->InOctets;
+        out->tx_bytes = (long long)row->OutOctets;
+        out->rx_errors = (long long)row->InErrors;
+        out->tx_errors = (long long)row->OutErrors;
+        out->link_speed_bps = (long long)row->ReceiveLinkSpeed;
+        out->up = (row->OperStatus == IfOperStatusUp) ? 1 : 0;
+        count++;
+    }
+
+    FreeMibTable(table);
     return count;
 }
 

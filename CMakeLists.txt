@@ -67,7 +67,7 @@ set_target_properties(hwsense PROPERTIES
 
 if(WIN32)
     # Link Win32 APIs and COM libraries
-    target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32 ole32 oleaut32 wbemuuid)
+    target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32 ole32 oleaut32 wbemuuid iphlpapi)
 endif()
 
 # Set output properties
@@ -118,6 +118,14 @@ if(NOT WIN32)
     target_include_directories(test_nvme PRIVATE src include)
     target_link_libraries(test_nvme PRIVATE m)
     add_test(NAME nvme COMMAND test_nvme)
+endif()
+
+if(WIN32)
+    # Live adapter query via the IP Helper API; no driver or admin needed.
+    add_executable(test_net tests/test_net.c src/core/win_sysstats.c)
+    target_include_directories(test_net PRIVATE src include)
+    target_link_libraries(test_net PRIVATE iphlpapi)
+    add_test(NAME net COMMAND test_net)
 endif()
 
 # HWSENSE_ALERT_LOGIC_ONLY drops the one function that reads a live
