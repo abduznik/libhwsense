@@ -69,6 +69,7 @@ CPU temperature/voltage/frequency/power (Intel MSR + AMD SMN/SVI2), GPU via NVML
 
 ## v0.5.0 (Next)
 
+- **Network interface counters** — `win_get_net_io()` returns per-adapter rx/tx bytes, errors and link speed from the IP Helper API; no driver or admin needed (#3)
 - **Verify the Linux path on more hardware** — Intel, `amdgpu`, IT8665E/IT8686E — and against `lm-sensors` (#37)
 - **AMD on Linux** — temperature is done via hwmon; voltage and power (SMN/SVI2 via `/dev/cpu/N/msr` and PCI config) remain (#38)
 - **OS abstraction layer** so vendor code stops carrying `#ifdef`s (#39)
