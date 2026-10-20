@@ -415,6 +415,7 @@ setInterval(updateSensors, 2000);
 | `win_get_mem_stats(mem)` | Read memory usage | int (1=success) |
 | `win_get_disk_stats(disks, max)` | Read disk usage | int (count) |
 | `win_get_net_io(nets, max)` | Read per-adapter rx/tx bytes, errors and link speed | int (count) |
+| `win_get_top_processes(procs, max, sort_by)` | Read top processes by memory or CPU time | int (count) |
 | `win_get_uptime()` | Read system uptime | Uptime struct |
 
 ### Diagnostic Functions
