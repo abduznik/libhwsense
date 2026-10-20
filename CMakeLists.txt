@@ -67,7 +67,7 @@ set_target_properties(hwsense PROPERTIES
 
 if(WIN32)
     # Link Win32 APIs and COM libraries
-    target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32 ole32 oleaut32 wbemuuid iphlpapi)
+    target_link_libraries(hwsense PRIVATE kernel32 advapi32 shell32 ole32 oleaut32 wbemuuid iphlpapi psapi)
 endif()
 
 # Set output properties
@@ -126,6 +126,12 @@ if(WIN32)
     target_include_directories(test_net PRIVATE src include)
     target_link_libraries(test_net PRIVATE iphlpapi)
     add_test(NAME net COMMAND test_net)
+
+    # Live process query via Toolhelp32; no driver or admin needed.
+    add_executable(test_processes tests/test_processes.c src/core/win_sysstats.c)
+    target_include_directories(test_processes PRIVATE src include)
+    target_link_libraries(test_processes PRIVATE iphlpapi psapi)
+    add_test(NAME processes COMMAND test_processes)
 endif()
 
 # HWSENSE_ALERT_LOGIC_ONLY drops the one function that reads a live

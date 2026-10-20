@@ -10,8 +10,11 @@
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
+#include <tlhelp32.h>
+#include <psapi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <inttypes.h>
 #include "../../include/hwsense.h"
 
@@ -127,6 +130,16 @@ int win_get_disk_io(win_disk_io_t *disks, int max_disks)
 }
 
 /*
+ * Convert a UTF-16 Windows string to UTF-8. Writes an empty string on failure
+ * so callers can supply their own fallback.
+ */
+static void wcs_to_utf8(const WCHAR *src, char *out, int out_size)
+{
+    out[0] = '\0';
+    WideCharToMultiByte(CP_UTF8, 0, src, -1, out, out_size, NULL, NULL);
+}
+
+/*
  * MIB_IF_ROW2 carries the adapter name as UTF-16. Convert to UTF-8 here so
  * callers do not have to care; fall back to the interface index if both the
  * alias and the description are empty.
@@ -135,7 +148,8 @@ static void net_row_name(const MIB_IF_ROW2 *row, char *out, int out_size)
 {
     const WCHAR *src = row->Alias[0] ? row->Alias : row->Description;
 
-    if (WideCharToMultiByte(CP_UTF8, 0, src, -1, out, out_size, NULL, NULL) <= 0)
+    wcs_to_utf8(src, out, out_size);
+    if (out[0] == '\0')
         snprintf(out, (size_t)out_size, "adapter%lu", (unsigned long)row->InterfaceIndex);
 }
 
@@ -169,6 +183,95 @@ int win_get_net_io(win_net_io_t *nets, int max_nets)
 
     FreeMibTable(table);
     return count;
+}
+
+/* Descending sort; qsort wants an int, not a double. */
+static int cmp_by_memory(const void *a, const void *b)
+{
+    double da = ((const win_process_t *)a)->working_set_mb;
+    double db = ((const win_process_t *)b)->working_set_mb;
+    return (da < db) - (da > db);
+}
+
+static int cmp_by_cpu(const void *a, const void *b)
+{
+    double da = ((const win_process_t *)a)->cpu_seconds;
+    double db = ((const win_process_t *)b)->cpu_seconds;
+    return (da < db) - (da > db);
+}
+
+/*
+ * Collect every process, sort, then hand back the top max_procs. The buffer
+ * grows on demand because the process count is not known up front, and there
+ * is no upper bound worth hardcoding.
+ *
+ * Protected processes cannot be opened; they are still listed with zeroed
+ * counters rather than dropped, so a missing entry is not mistaken for an
+ * absent process.
+ */
+int win_get_top_processes(win_process_t *procs, int max_procs, int sort_by)
+{
+    HANDLE snap;
+    PROCESSENTRY32W entry;
+    win_process_t *all = NULL;
+    size_t count = 0, capacity = 0;
+    int out_count;
+
+    if (!procs || max_procs <= 0) return 0;
+
+    snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return 0;
+
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snap, &entry)) {
+        do {
+            win_process_t row;
+            HANDLE h;
+
+            memset(&row, 0, sizeof(row));
+            row.pid = entry.th32ProcessID;
+            wcs_to_utf8(entry.szExeFile, row.name, (int)sizeof(row.name));
+
+            h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, entry.th32ProcessID);
+            if (h) {
+                FILETIME created, exited, kernel, user;
+                PROCESS_MEMORY_COUNTERS mem;
+
+                if (GetProcessTimes(h, &created, &exited, &kernel, &user)) {
+                    ULARGE_INTEGER k, u;
+                    k.LowPart = kernel.dwLowDateTime;  k.HighPart = kernel.dwHighDateTime;
+                    u.LowPart = user.dwLowDateTime;    u.HighPart = user.dwHighDateTime;
+                    row.cpu_seconds = (double)(k.QuadPart + u.QuadPart) / 10000000.0;
+                }
+                if (GetProcessMemoryInfo(h, &mem, sizeof(mem)))
+                    row.working_set_mb = (double)mem.WorkingSetSize / (1024.0 * 1024.0);
+                CloseHandle(h);
+            }
+
+            if (count == capacity) {
+                size_t grown_capacity = capacity ? capacity * 2 : 128;
+                win_process_t *grown = realloc(all, grown_capacity * sizeof(*all));
+                if (!grown) break;
+                all = grown;
+                capacity = grown_capacity;
+            }
+            all[count++] = row;
+        } while (Process32NextW(snap, &entry));
+    }
+    CloseHandle(snap);
+
+    if (count == 0) {
+        free(all);
+        return 0;
+    }
+
+    qsort(all, count, sizeof(*all),
+          sort_by == HWSENSE_SORT_CPU ? cmp_by_cpu : cmp_by_memory);
+
+    out_count = (count < (size_t)max_procs) ? (int)count : max_procs;
+    memcpy(procs, all, (size_t)out_count * sizeof(*all));
+    free(all);
+    return out_count;
 }
 
 win_uptime_t win_get_uptime(void)

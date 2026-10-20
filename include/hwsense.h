@@ -392,11 +392,30 @@ typedef struct {
 #define MAX_WIN_DISK_IO 8
 #define MAX_WIN_NETS 32
 
+/*
+ * One process, as returned by win_get_top_processes.
+ *
+ * cpu_seconds is cumulative user+kernel time, not a percentage: take two
+ * snapshots and divide the delta by elapsed wall time for a rate.
+ * working_set_mb is resident memory at the moment of the call.
+ */
+typedef struct {
+    unsigned long pid;
+    char name[64];
+    double cpu_seconds;
+    double working_set_mb;
+} win_process_t;
+
+#define MAX_WIN_PROCESSES 32
+#define HWSENSE_SORT_MEMORY 0
+#define HWSENSE_SORT_CPU    1
+
 HWSENSE_API int win_get_mem_stats(win_mem_stats_t *mem);
 HWSENSE_API int win_get_cpu_load_sampled(win_cpu_load_t *load);
 HWSENSE_API int win_get_disk_stats(win_disk_stats_t *disks, int max_disks);
 HWSENSE_API int win_get_disk_io(win_disk_io_t *disks, int max_disks);
 HWSENSE_API int win_get_net_io(win_net_io_t *nets, int max_nets);
+HWSENSE_API int win_get_top_processes(win_process_t *procs, int max_procs, int sort_by);
 HWSENSE_API win_uptime_t win_get_uptime(void);
 
 /* ── Embedded Controller API ───────────────────────────────────────── */
