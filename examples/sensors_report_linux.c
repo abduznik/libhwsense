@@ -27,6 +27,17 @@ int main(void)
     else
         printf("\nGPU: %s\n", g.error);
 
+    {
+        hwsense_thermal_zone_t z[HWSENSE_MAX_THERMAL_ZONES];
+        int nz = hwsense_thermal_zones(z, HWSENSE_MAX_THERMAL_ZONES);
+
+        if (nz > 0) {
+            printf("\n--- Thermal zones ---\n");
+            for (i = 0; i < nz; i++)
+                printf("  %-24s %.1f C\n", z[i].type, z[i].celsius);
+        }
+    }
+
     s = hwsense_superio_temps(ctx);
     if (s.ok) {
         printf("\n--- Board temps (%s) ---\n", s.chip_name);

@@ -3,7 +3,8 @@
  *
  * CPU temperature comes from hwmon sysfs first (no root). Fallback: MSR access goes through /dev/cpu/N/msr,
  * which requires CAP_SYS_RAWIO (typically root) and the `msr` kernel
- * module loaded (`modprobe msr`).
+ * module loaded (`modprobe msr`). Last resort is the kernel thermal zones,
+ * which is the only source on Android and most ARM boards.
  *
  * Only the Intel CPU temperature path is implemented so far. Everything
  * else in the public API is Windows-only (WinRing0, WMI, ADL, Super I/O,
@@ -13,6 +14,7 @@
 #ifndef _WIN32
 
 #include "hwsense_internal.h"
+#include "soc_linux.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +27,7 @@ extern hwsense_temp_result_t hwsense_hwmon_cpu_temp_linux(void);
 
 /*
  * Detect CPU vendor from /proc/cpuinfo.
- * Returns 'I' for Intel, 'A' for AMD, '?' for unknown.
+ * Returns 'I' for Intel, 'A' for AMD, 'R' for ARM, '?' for unknown.
  */
 int hwsense_detect_vendor(void)
 {
@@ -38,6 +40,12 @@ int hwsense_detect_vendor(void)
         return '?';
 
     while (fgets(line, sizeof(line), f)) {
+        /* ARM has no vendor_id; every core lists a "CPU implementer". */
+        if (strncmp(line, "CPU implementer", 15) == 0) {
+            vendor = 'R';
+            break;
+        }
+
         if (strncmp(line, "vendor_id", 9) != 0)
             continue;
 
@@ -71,7 +79,7 @@ void hwsense_shutdown(hwsense_ctx_t *ctx)
 
 hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)
 {
-    hwsense_temp_result_t r = {0};
+    hwsense_temp_result_t r = {0}, t;
 
     if (!ctx) {
         snprintf(r.error, sizeof(r.error), "Invalid context");
@@ -84,8 +92,19 @@ hwsense_temp_result_t hwsense_cpu_package_temp(hwsense_ctx_t *ctx)
     if (r.ok)
         return r;
 
-    if (ctx->vendor == 'I')
-        return hwsense_intel_core_temp_linux();
+    if (ctx->vendor == 'I') {
+        hwsense_temp_result_t msr = hwsense_intel_core_temp_linux();
+        if (msr.ok)
+            return msr;
+        /* x86_pkg_temp is world-readable when the MSR is not. */
+        t = hwsense_thermal_cpu_temp(HWSENSE_THERMAL_ROOT);
+        return t.ok ? t : msr;
+    }
+
+    /* Android and ARM boards: no hwmon CPU sensor, but thermal zones. */
+    t = hwsense_thermal_cpu_temp(HWSENSE_THERMAL_ROOT);
+    if (t.ok)
+        return t;
 
     /* r.error already explains the hwmon failure */
     return r;

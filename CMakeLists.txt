@@ -36,6 +36,7 @@ else()
         src/cpu/intel_linux.c
         src/cpu/hwmon_linux.c
         src/core/sensors_linux.c
+        src/core/soc_linux.c
         src/core/unified_linux.c
         src/gpu/gpu_linux.c
         src/motherboard/ite_linux.c
@@ -118,6 +119,12 @@ if(NOT WIN32)
     target_include_directories(test_nvme PRIVATE src include)
     target_link_libraries(test_nvme PRIVATE m)
     add_test(NAME nvme COMMAND test_nvme)
+
+    # Thermal zones, KGSL and SoC name against a fake sysfs tree.
+    add_executable(test_soc tests/test_soc.c src/core/soc_linux.c)
+    target_include_directories(test_soc PRIVATE src include)
+    target_link_libraries(test_soc PRIVATE m)
+    add_test(NAME soc COMMAND test_soc)
 endif()
 
 if(WIN32)

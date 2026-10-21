@@ -8,11 +8,32 @@
 #ifndef _WIN32
 
 #include "../core/hwsense_internal.h"
+#include "../core/soc_linux.h"
 #include <dlfcn.h>
 #include <stdio.h>
 #include <string.h>
 
 extern int hwsense_amdgpu_info_linux(int gpu_index, hwsense_gpu_info_t *info);
+
+/*
+ * Phone/SoC GPU: temperature from the GPU thermal zones, plus model, clock
+ * and load from Qualcomm's KGSL node when it exists. Either is enough.
+ */
+static int mobile_gpu_info(hwsense_gpu_info_t *g)
+{
+    double c;
+    int have_temp = hwsense_thermal_gpu_temp(HWSENSE_THERMAL_ROOT, &c);
+    int have_kgsl = hwsense_kgsl_info(HWSENSE_KGSL_ROOT, g);
+
+    if (!have_temp && !have_kgsl)
+        return 0;
+    if (have_temp)
+        g->temperature = (int)(c + 0.5);
+    if (!g->name[0])
+        snprintf(g->name, sizeof(g->name), "GPU (thermal zone)");
+    g->ok = 1;
+    return 1;
+}
 
 typedef void *nvml_device_t;
 typedef struct { unsigned long long total, free, used; } nvml_memory_t;
@@ -100,8 +121,13 @@ hwsense_gpu_info_t hwsense_gpu_info(int gpu_index)
     if (gpu_index >= 0 && hwsense_amdgpu_info_linux(gpu_index, &g))
         return g;
 
+    /* Only one GPU is described by the SoC sources. */
+    if (gpu_index == 0 && mobile_gpu_info(&g))
+        return g;
+
     snprintf(g.error, sizeof(g.error),
-             "No GPU found (NVML libnvidia-ml.so.1 not loadable and no amdgpu hwmon device)");
+             "No GPU found (NVML libnvidia-ml.so.1 not loadable, no amdgpu hwmon "
+             "device, no GPU thermal zone or KGSL node)");
     return g;
 }
 

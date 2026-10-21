@@ -8,6 +8,8 @@
 #include "hwsense_unified.h"
 #include "hwsense_internal.h"
 #include "hwmon_util_linux.h"
+#include "soc_linux.h"
+#include <time.h>
 #include <unistd.h>
 #include <sys/statvfs.h>
 
@@ -16,7 +18,10 @@ hwsense_ctx_t *hwsense_unified_init(void)
     return hwsense_init();
 }
 
-/* CPU busy percentage over a short sampling window. */
+/*
+ * CPU busy percentage over a short sampling window. Returns -1.0 when
+ * /proc/stat is unreadable, as it is for unprivileged apps on Android 8+.
+ */
 double hwsense_get_cpu_load(hwsense_ctx_t *ctx)
 {
     unsigned long long a[8], b[8], ta = 0, tb = 0;
@@ -108,7 +113,8 @@ int hwsense_read_all(hwsense_ctx_t *ctx, hwsense_sensor_data_t *data)
     memset(data, 0, sizeof(*data));
 
     snprintf(data->cpu_vendor, sizeof(data->cpu_vendor), "%s",
-             ctx->vendor == 'I' ? "Intel" : ctx->vendor == 'A' ? "AMD" : "Unknown");
+             ctx->vendor == 'I' ? "Intel" : ctx->vendor == 'A' ? "AMD" :
+             ctx->vendor == 'R' ? "ARM" : "Unknown");
 
     f = fopen("/proc/cpuinfo", "r");
     if (f) {
@@ -130,6 +136,8 @@ int hwsense_read_all(hwsense_ctx_t *ctx, hwsense_sensor_data_t *data)
         data->cpu_threads = siblings;
         data->cpu_cores = cores;
     }
+    if (!data->cpu_name[0])
+        hwsense_soc_name(data->cpu_name, sizeof(data->cpu_name));
     if (!data->cpu_threads)
         data->cpu_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
     if (!data->cpu_cores)
@@ -151,13 +159,24 @@ int hwsense_read_all(hwsense_ctx_t *ctx, hwsense_sensor_data_t *data)
     if (meminfo(&data->memory_total_gb, &data->memory_used_gb))
         data->memory_percent = (int)(100.0 * data->memory_used_gb / data->memory_total_gb);
 
+    /* /proc/uptime is hidden on Android; CLOCK_BOOTTIME is the same clock. */
+    up = -1.0;
     f = fopen("/proc/uptime", "r");
     if (f) {
-        if (fscanf(f, "%lf", &up) == 1) {
-            data->uptime_days = (int)(up / 86400);
-            data->uptime_hours = (int)(up / 3600) % 24;
-        }
+        if (fscanf(f, "%lf", &up) != 1)
+            up = -1.0;
         fclose(f);
+    }
+#ifdef CLOCK_BOOTTIME
+    if (up < 0) {
+        struct timespec ts;
+        if (clock_gettime(CLOCK_BOOTTIME, &ts) == 0)
+            up = (double)ts.tv_sec;
+    }
+#endif
+    if (up >= 0) {
+        data->uptime_days = (int)(up / 86400);
+        data->uptime_hours = (int)(up / 3600) % 24;
     }
 
     fans = hwsense_superio_fans(ctx);

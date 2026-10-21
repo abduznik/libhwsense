@@ -259,6 +259,22 @@ Supported on Linux, all without root (sysfs hwmon + NVML):
 
 CPU voltage/power and the WinRing0, WMI, ADL, Super I/O and Embedded Controller backends remain Windows-only.
 
+#### Android / Termux
+
+The Linux backend builds under Termux (`pkg install clang cmake`) and runs without root. Android has no hwmon CPU sensor and hides `/proc/stat` and `/proc/uptime` from apps, so these readings come from other sources:
+
+| Reading | Source |
+|---------|--------|
+| CPU temperature | Hottest CPU zone in `/sys/class/thermal`. `hwsense_thermal_zones()` lists every zone that reports a plausible value |
+| GPU temperature | GPU thermal zones (`gpuss-*`, `gpu-thermal`) |
+| GPU model, clock, load | Qualcomm KGSL, `/sys/class/kgsl/kgsl-3d0` |
+| CPU name, vendor | `ro.soc.manufacturer` / `ro.soc.model` system properties, `ARM` from cpuinfo |
+| Uptime | `CLOCK_BOOTTIME` |
+
+Not available without root: CPU load (`hwsense_get_cpu_load()` returns -1.0, which `hwsense_read_all()` stores as 0), voltage, power, MSR access and NVMe SMART. Some thermal zones, mostly PMIC and charger sensors, are also denied.
+
+Verified on one device only (Galaxy Tab S9+, Snapdragon 8 Gen 2). Other SoCs are matched by common kernel zone names (`cpu*`, `mtktscpu*`, `soc-thermal`) but are untested, and GPU model/clock/load is Qualcomm-only.
+
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
@@ -369,6 +385,8 @@ libhwsense/
 │   │   ├── driver_linux.c     /dev/cpu/N/msr lifecycle + dispatch (Linux)
 │   │   ├── api.c              Vendor dispatch (AMD/Intel)
 │   │   ├── sensor_math.h      Pure register-decode math (unit-tested)
+│   │   ├── soc_linux.c        Thermal zones, KGSL GPU, SoC name (Android/ARM)
+│   │   ├── soc_math.h         Thermal decode and zone matching (unit-tested)
 │   │   ├── export.c           JSON/CSV serialization (unit-tested)
 │   │   ├── alert.c            Threshold alert logic (unit-tested)
 │   │   ├── wmi.c              WMI sensor queries
@@ -396,7 +414,8 @@ libhwsense/
 ├── tests/
 │   ├── test_sensor_math.c     Register-decode unit tests (no hardware)
 │   ├── test_export.c          JSON/CSV serialization tests
-│   └── test_alert.c           Threshold alert tests
+│   ├── test_alert.c           Threshold alert tests
+│   └── test_soc.c             Thermal zones / KGSL against a fake sysfs tree
 ├── cmake/
 │   ├── hwsenseConfig.cmake.in CMake package config template
 │   └── hwsense.pc.in          pkg-config template (Linux)

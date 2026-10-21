@@ -266,13 +266,36 @@ typedef struct {
  * hwsense_nvme_temperature().
  */
 HWSENSE_API int hwsense_nvme_smart(int index, hwsense_nvme_smart_t *out);
+
+/* Upper bound on zones hwsense_thermal_zones() will report. */
+#define HWSENSE_MAX_THERMAL_ZONES 128
+
+/*
+ * One kernel thermal zone (/sys/class/thermal/thermal_zoneN).
+ * `type` is the zone's own name, e.g. "cpu-0-0", "gpuss-3", "battery".
+ */
+typedef struct {
+    char   type[64];
+    double celsius;
+} hwsense_thermal_zone_t;
+
+/*
+ * List the thermal zones that currently report a plausible temperature.
+ * Phones and ARM boards expose most of their sensors this way instead of
+ * through hwmon. Zones that are unreadable or report a sentinel (such as
+ * -273 C for an inactive sensor) are left out.
+ *
+ * Fills at most `max` entries and returns how many it wrote. Needs no root
+ * on stock Android.
+ */
+HWSENSE_API int hwsense_thermal_zones(hwsense_thermal_zone_t *out, int max);
 #endif
 
 /* ── Extended API (for advanced users) ──────────────────────────────── */
 
 /*
  * Detect CPU vendor.
- * Returns 'I' for Intel, 'A' for AMD, '?' for unknown.
+ * Returns 'I' for Intel, 'A' for AMD, 'R' for ARM, '?' for unknown.
  */
 HWSENSE_API int hwsense_detect_vendor(void);
 
