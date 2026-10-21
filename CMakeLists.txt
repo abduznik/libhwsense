@@ -20,6 +20,7 @@ if(WIN32)
         src/cpu/cpu_diag.c
         src/storage/storage.c
         src/motherboard/superio.c
+        src/motherboard/ite_decode.c
         src/motherboard/ec.c
         src/gpu/gpu.c
     )
@@ -39,6 +40,7 @@ else()
         src/core/soc_linux.c
         src/core/unified_linux.c
         src/gpu/gpu_linux.c
+        src/motherboard/ite_decode.c
         src/motherboard/ite_linux.c
         src/motherboard/nct_linux.c
         src/storage/nvme_linux.c
@@ -107,6 +109,15 @@ add_test(NAME sensor_math COMMAND test_sensor_math)
 add_executable(test_export tests/test_export.c src/core/export.c)
 target_include_directories(test_export PRIVATE src include)
 add_test(NAME export COMMAND test_export)
+
+# The ITE decoder is shared by the Linux and Windows readers, so its test
+# builds on both platforms and needs no hardware.
+add_executable(test_ite tests/test_ite.c src/motherboard/ite_decode.c)
+target_include_directories(test_ite PRIVATE src include)
+if(NOT WIN32)
+    target_link_libraries(test_ite PRIVATE m)
+endif()
+add_test(NAME ite COMMAND test_ite)
 
 if(NOT WIN32)
     # Decode logic only; no hardware or privileges needed.
