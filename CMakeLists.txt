@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(libhwsense VERSION 0.4.1 LANGUAGES C)
+project(libhwsense VERSION 0.5.0 LANGUAGES C)
 
 if(WIN32)
     # Define HWSENSE_DLL_EXPORTS for DLL builds

@@ -88,7 +88,7 @@ jobs:
       run: |
         export PKG_CONFIG_PATH="$PWD/_prefix/lib/pkgconfig"
         pkg-config --exists hwsense
-        test "$(pkg-config --modversion hwsense)" = "0.4.1"
+        test "$(pkg-config --modversion hwsense)" = "0.5.0"
         echo "cflags: $(pkg-config --cflags hwsense)"
         echo "libs:   $(pkg-config --libs hwsense)"
 

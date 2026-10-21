@@ -255,7 +255,7 @@ Supported on Linux, all without root (sysfs hwmon + NVML):
 - CPU clock, load, memory, uptime, and the unified `hwsense_read_all()` / JSON / CSV export
 - NVIDIA GPU via NVML (loaded at runtime with `dlopen`), AMD GPU via `amdgpu` hwmon
 - NVMe temperature (hwmon), and the full SMART log via `hwsense_nvme_smart()` (wear, TB read/written, power-on hours, errors; needs root or `CAP_SYS_ADMIN`)
-- Motherboard fans, temperatures and voltages from a loaded Super I/O hwmon driver (`nct6775`, `it87`, ...), or read directly from the chip over `/dev/port` when none is loaded (needs `CAP_SYS_RAWIO`): ITE IT8655E/IT8665E/IT8686E and Nuvoton NCT6779/NCT6791-NCT6799. Only the IT8655E is verified on real hardware
+- Motherboard fans, temperatures and voltages from a loaded Super I/O hwmon driver (`nct6775`, `it87`, ...), or read directly from the chip over `/dev/port` when none is loaded (needs `CAP_SYS_RAWIO`): ITE IT8655E/IT8665E/IT8686E/IT8628E/IT8688E/IT8689E/IT8728F and Nuvoton NCT6779/NCT6791-NCT6799. Only the IT8655E is verified on real hardware
 
 CPU voltage/power and the WinRing0, WMI, ADL, Super I/O and Embedded Controller backends remain Windows-only.
 

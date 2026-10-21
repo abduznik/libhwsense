@@ -1,6 +1,35 @@
 # libhwsense Roadmap
 
-## v0.4.1 (Current Release)
+## v0.5.0 (Current Release)
+
+### Added
+
+| Feature | Notes |
+|---------|-------|
+| Android / Termux backend | The Linux backend now reads a stock, unrooted Android device. CPU and GPU temperature from the kernel thermal zones, Qualcomm KGSL GPU model/clock/load, SoC name from system properties, ARM vendor detection, and `CLOCK_BOOTTIME` uptime where `/proc/uptime` is hidden |
+| `hwsense_thermal_zones()` | Lists every thermal zone with a plausible reading (Linux and Android). Inactive-sensor sentinels such as -273 C are dropped |
+| Network interface counters (Windows) | `win_get_net_io()` returns per-adapter rx/tx bytes, errors and link speed from the IP Helper API; no driver or admin needed (#3) |
+| Process attribution (Windows) | `win_get_top_processes()` returns the top processes by working set or cumulative CPU time, so "the box is hot" can be answered with "this process is hot" (#16) |
+| ITE Super I/O on Windows | The Windows ITE reader unlocked the chip with the Nuvoton key and read sensors through the config ports, so it never worked. It now uses the ITE key and the chip's own hardware-monitor base address, with a write allow-list limited to the config ports plus the two discovered monitor ports (#60) |
+| Shared ITE decoder | `ite_decode.c` holds the register layout and conversion formulas for both the Linux and Windows readers, and adds IT8628E, IT8688E, IT8689E and IT8728F from the `it87` driver tables (#60) |
+
+### Changed
+
+- On Intel Linux, `hwsense_cpu_package_temp()` now falls back to the thermal zones (`x86_pkg_temp`) when the MSR is unreadable, instead of returning the MSR error.
+- `hwsense_detect_vendor()` can now return `'R'` for ARM.
+- On Linux, the IT8655E now reports its 3 real fans instead of probing 5. The Windows reader no longer claims IT8790E/IT8792E, which use a different tachometer layout.
+
+### Verification status
+
+Android was verified on one device only: a Galaxy Tab S9+ (Snapdragon 8 Gen 2), unrooted, from Termux. The temperature, GPU, uptime and zone-list readings were checked against raw sysfs reads. `hwsense_get_cpu_load()` returns -1.0 there because `/proc/stat` is hidden from apps; a load estimate from cpuidle residency was tried and rejected because it reads about 25 points high on an idle system. Zone matching for MediaTek, Rockchip, Raspberry Pi and Intel (`mtktscpu*`, `soc-thermal`, `cpu-thermal`, `x86_pkg_temp`) follows common kernel names but has not been run on real hardware, and the Intel fallback above has not been run on Intel hardware. GPU model, clock and load are Qualcomm-only.
+
+The Windows additions are covered by live-query tests in the Windows CI job (`test_net`, `test_processes`).
+
+The Windows ITE reader has **not been run on Windows hardware**: the WinRing0 port access and the port-write allow-list are untested against a real driver, and CI only builds it and runs the decoder tests. On every Windows board the ITE probe now runs before Nuvoton detection, which adds a few writes to the config ports on non-ITE chips. Only the IT8655E has been verified on real hardware (Linux, v0.4.0); IT8628E, IT8688E, IT8689E and IT8728F follow the `it87` tables but are untested. The Linux ITE refactor was checked against the previous reader over 6,000 simulated register files and gave identical readings apart from the IT8655E fan count above; it has not been re-run on the real chip.
+
+---
+
+## v0.4.1
 
 Packaging fixes for v0.4.0:
 
@@ -65,17 +94,18 @@ CPU temperature/voltage/frequency/power (Intel MSR + AMD SMN/SVI2), GPU via NVML
 
 **`HANDLE` in the public API.** `hwsense.h` still exposes Win32 types on a few entry points, guarded by `#ifdef _WIN32`. Decoupling these is a prerequisite for Linux being a first-class target.
 
+**Android is verified on one device.** Temperatures, GPU and uptime work without root on a Galaxy Tab S9+ (Snapdragon 8 Gen 2). CPU load, voltage, power, MSR access and SMART are not available to unprivileged apps, so they are not reported. Other SoC families are matched by common kernel zone names and are untested; GPU model, clock and load are Qualcomm KGSL only.
+
 ---
 
-## v0.5.0 (Next)
+## v0.6.0 (Next)
 
-- **Network interface counters** — `win_get_net_io()` returns per-adapter rx/tx bytes, errors and link speed from the IP Helper API; no driver or admin needed (#3)
-- **Process attribution** — `win_get_top_processes()` returns the top processes by working set or cumulative CPU time, so "the box is hot" can be answered with "this process is hot" (#16)
 - **Verify the Linux path on more hardware** — Intel, `amdgpu`, IT8665E/IT8686E — and against `lm-sensors` (#37)
 - **AMD on Linux** — temperature is done via hwmon; voltage and power (SMN/SVI2 via `/dev/cpu/N/msr` and PCI config) remain (#38)
 - **OS abstraction layer** so vendor code stops carrying `#ifdef`s (#39)
 - **Replace or augment WinRing0** (#44) — it is unmaintained, flagged by AV/EDR, and blocked by driver signature enforcement, which is a real adoption blocker
 - Verify the Zen4/Zen5 SMU offsets on real parts
+- Verify the Windows ITE reader on real hardware (#60)
 
 ---
 
