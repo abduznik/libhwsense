@@ -74,7 +74,7 @@ CPU temperature/voltage/frequency/power (Intel MSR + AMD SMN/SVI2), GPU via NVML
 - **Verify the Linux path on more hardware** — Intel, `amdgpu`, IT8665E/IT8686E — and against `lm-sensors` (#37)
 - **AMD on Linux** — temperature is done via hwmon; voltage and power (SMN/SVI2 via `/dev/cpu/N/msr` and PCI config) remain (#38)
 - **OS abstraction layer** so vendor code stops carrying `#ifdef`s (#39)
-- **Replace or augment WinRing0** (#44) — it is unmaintained, flagged by AV/EDR, and blocked by driver signature enforcement, which is a real adoption blocker
+- **Replace or augment WinRing0** (#44) — it is unmaintained, flagged by AV/EDR, and blocked by driver signature enforcement, which is a real adoption blocker. Decision record: `docs/decisions/0001-kernel-access-backend.md` (WinRing0 stays the default; PawnIO backend proposed behind a build flag)
 - Verify the Zen4/Zen5 SMU offsets on real parts
 
 ---
