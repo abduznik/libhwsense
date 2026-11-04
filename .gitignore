@@ -17,6 +17,7 @@ error.txt
 # CMake build trees
 build/
 build_*/
+build-*/
 _prefix/
 _consumer/
 
